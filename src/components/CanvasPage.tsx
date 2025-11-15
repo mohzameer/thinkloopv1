@@ -1,6 +1,8 @@
-import { useState } from 'react'
-import { Box, Flex, Text, ActionIcon, Stack, Paper, Group } from '@mantine/core'
-import { IconUser, IconChevronLeft, IconChevronRight, IconFileText, IconGitBranch, IconGitFork } from '@tabler/icons-react'
+import { useState, useCallback } from 'react'
+import { Box, Flex, Text, ActionIcon, Stack, Paper, Group, Button } from '@mantine/core'
+import { IconUser, IconChevronLeft, IconChevronRight, IconFileText, IconGitBranch, IconGitFork, IconSquare, IconCircle } from '@tabler/icons-react'
+import { ReactFlow, Background, Controls, MiniMap, addEdge, useNodesState, useEdgesState, Handle, Position, type Connection, type Node, type NodeTypes } from '@xyflow/react'
+import '@xyflow/react/dist/style.css'
 
 interface FileItem {
   id: string
@@ -58,11 +60,178 @@ const mockHierarchy: HierarchyMainItem[] = [
   }
 ]
 
+// Custom Circle Node Component
+const CircleNode = ({ data }: { data: { label: string; categories?: string[] } }) => {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div
+        style={{
+          width: '100px',
+          height: '100px',
+          borderRadius: '50%',
+          border: '2px solid #1a192b',
+          backgroundColor: 'white',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '12px',
+          fontWeight: 500,
+          textAlign: 'center',
+          padding: '8px',
+          position: 'relative'
+        }}
+      >
+        <Handle type="target" position={Position.Top} />
+        <Handle type="source" position={Position.Bottom} />
+        <Handle type="target" position={Position.Left} />
+        <Handle type="source" position={Position.Right} />
+        {data.label}
+      </div>
+      {data.categories && data.categories.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          {data.categories.map((category, idx) => (
+            <div
+              key={idx}
+              style={{
+                backgroundColor: '#228be6',
+                color: 'white',
+                padding: '2px 6px',
+                borderRadius: '3px',
+                fontSize: '9px',
+                fontWeight: 500,
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {category}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Custom Rectangle Node Component
+const RectangleNode = ({ data }: { data: { label: string; categories?: string[] } }) => {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div
+        style={{
+          padding: '10px 20px',
+          borderRadius: '3px',
+          border: '1px solid #1a192b',
+          backgroundColor: 'white',
+          fontSize: '12px',
+          fontWeight: 500,
+          position: 'relative'
+        }}
+      >
+        <Handle type="target" position={Position.Top} />
+        <Handle type="source" position={Position.Bottom} />
+        <Handle type="target" position={Position.Left} />
+        <Handle type="source" position={Position.Right} />
+        {data.label}
+      </div>
+      {data.categories && data.categories.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          {data.categories.map((category, idx) => (
+            <div
+              key={idx}
+              style={{
+                backgroundColor: '#12b886',
+                color: 'white',
+                padding: '2px 6px',
+                borderRadius: '3px',
+                fontSize: '9px',
+                fontWeight: 500,
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {category}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Define node types
+const nodeTypes: NodeTypes = {
+  circle: CircleNode,
+  rectangle: RectangleNode
+}
+
+// Initial nodes for React Flow
+const initialNodes = [
+  {
+    id: '1',
+    type: 'input',
+    data: { label: 'Start' },
+    position: { x: 250, y: 25 }
+  },
+  {
+    id: '2',
+    type: 'rectangle',
+    data: { 
+      label: 'Rectangle Node',
+      categories: ['Design', 'Important']
+    },
+    position: { x: 100, y: 150 }
+  },
+  {
+    id: '3',
+    type: 'circle',
+    data: { 
+      label: 'Circle Node',
+      categories: ['Development']
+    },
+    position: { x: 400, y: 150 }
+  },
+  {
+    id: '4',
+    type: 'output',
+    data: { label: 'End' },
+    position: { x: 250, y: 300 }
+  }
+]
+
+// Initial edges for React Flow
+const initialEdges = [
+  { id: 'e1-2', source: '1', target: '2', animated: true },
+  { id: 'e1-3', source: '1', target: '3' },
+  { id: 'e2-4', source: '2', target: '4' },
+  { id: 'e3-4', source: '3', target: '4' }
+]
+
 function CanvasPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
   const sidebarWidth = sidebarCollapsed ? 0 : 280
   const rightSidebarWidth = rightSidebarCollapsed ? 0 : 300
+  
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const [nodeIdCounter, setNodeIdCounter] = useState(5)
+  
+  const onConnect = useCallback(
+    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
+    [setEdges]
+  )
+
+  const addNode = useCallback((nodeType: 'rectangle' | 'circle') => {
+    const newNode: Node = {
+      id: `${nodeIdCounter}`,
+      type: nodeType,
+      data: { label: `${nodeType === 'circle' ? 'Circle' : 'Rectangle'} ${nodeIdCounter}` },
+      position: {
+        x: Math.random() * 400 + 100,
+        y: Math.random() * 300 + 100
+      }
+    }
+    setNodes((nds) => [...nds, newNode])
+    setNodeIdCounter((id) => id + 1)
+  }, [nodeIdCounter, setNodes])
 
   const formatDate = (date: Date) => {
     const now = new Date()
@@ -221,24 +390,67 @@ function CanvasPage() {
           {sidebarCollapsed ? <IconChevronRight size={18} /> : <IconChevronLeft size={18} />}
         </ActionIcon>
 
-        {/* Canvas content */}
+        {/* React Flow Canvas */}
         <Box
           style={{
             flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'margin-left 0.3s ease'
+            transition: 'margin-left 0.3s ease',
+            position: 'relative'
           }}
         >
-          <canvas
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            nodeTypes={nodeTypes}
+            fitView
+          >
+            <Background />
+            <Controls />
+            <MiniMap />
+          </ReactFlow>
+
+          {/* Floating Toolbar */}
+          <Paper
+            shadow="md"
+            p="md"
             style={{
-              border: '1px solid #ddd',
-              backgroundColor: 'white'
+              position: 'absolute',
+              top: '20px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 5,
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'center',
+              backgroundColor: 'white',
+              borderRadius: '8px'
             }}
-            width={800}
-            height={600}
-          />
+          >
+            <Text size="sm" fw={600} style={{ color: '#666' }}>
+              Add Node:
+            </Text>
+            <Button
+              leftSection={<IconSquare size={18} />}
+              variant="light"
+              color="blue"
+              size="sm"
+              onClick={() => addNode('rectangle')}
+            >
+              Rectangle
+            </Button>
+            <Button
+              leftSection={<IconCircle size={18} />}
+              variant="light"
+              color="teal"
+              size="sm"
+              onClick={() => addNode('circle')}
+            >
+              Circle
+            </Button>
+          </Paper>
         </Box>
 
         {/* Right Sidebar */}
