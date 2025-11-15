@@ -1,64 +1,18 @@
-import { useState, useCallback } from 'react'
-import { Box, Flex, Text, ActionIcon, Stack, Paper, Group, Button } from '@mantine/core'
-import { IconUser, IconChevronLeft, IconChevronRight, IconFileText, IconGitBranch, IconGitFork, IconSquare, IconCircle } from '@tabler/icons-react'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { Box, Flex, Text, ActionIcon, Stack, Paper, Group, Button, Loader, TextInput } from '@mantine/core'
+import { IconUser, IconChevronLeft, IconChevronRight, IconFileText, IconGitBranch, IconGitFork, IconSquare, IconCircle, IconPlus } from '@tabler/icons-react'
 import { ReactFlow, Background, Controls, MiniMap, addEdge, useNodesState, useEdgesState, Handle, Position, type Connection, type Node, type NodeTypes } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { AuthDebugPanel } from './AuthDebugPanel'
+import { useProject } from '../hooks/useProject'
+import { useFiles } from '../hooks/useFiles'
+import { useHierarchy } from '../hooks/useHierarchy'
+import { useCanvas } from '../hooks/useCanvas'
+import type { Timestamp } from 'firebase/firestore'
 
-interface FileItem {
-  id: string
-  name: string
-  lastUpdated: Date
+interface CanvasPageProps {
+  userId: string
 }
-
-interface HierarchySubItem {
-  id: string
-  name: string
-  type: 'sub'
-}
-
-interface HierarchyMainItem {
-  id: string
-  name: string
-  type: 'main'
-  subItems?: HierarchySubItem[]
-}
-
-// Mock file data
-const mockFiles: FileItem[] = [
-  { id: '1', name: 'My First Post', lastUpdated: new Date('2025-11-15T10:30:00') },
-  { id: '2', name: 'Project Ideas', lastUpdated: new Date('2025-11-14T16:45:00') },
-  { id: '3', name: 'Meeting Notes', lastUpdated: new Date('2025-11-13T09:15:00') },
-  { id: '4', name: 'Design Concepts', lastUpdated: new Date('2025-11-12T14:20:00') },
-  { id: '5', name: 'Weekly Summary', lastUpdated: new Date('2025-11-10T11:00:00') }
-]
-
-// Mock hierarchy data
-const mockHierarchy: HierarchyMainItem[] = [
-  {
-    id: 'main-1',
-    name: 'Main',
-    type: 'main',
-    subItems: [
-      { id: 'var-1', name: 'Var 1', type: 'sub' },
-      { id: 'var-2', name: 'Var 2', type: 'sub' }
-    ]
-  },
-  {
-    id: 'main-2',
-    name: 'Main 2',
-    type: 'main',
-    subItems: [
-      { id: 'var-3', name: 'Option A', type: 'sub' },
-      { id: 'var-4', name: 'Option B', type: 'sub' }
-    ]
-  },
-  {
-    id: 'main-var1',
-    name: 'Main-Var1',
-    type: 'main',
-    subItems: []
-  }
-]
 
 // Custom Circle Node Component
 const CircleNode = ({ data }: { data: { label: string; categories?: string[] } }) => {
@@ -162,58 +116,112 @@ const nodeTypes: NodeTypes = {
   rectangle: RectangleNode
 }
 
-// Initial nodes for React Flow
-const initialNodes = [
-  {
-    id: '1',
-    type: 'input',
-    data: { label: 'Start' },
-    position: { x: 250, y: 25 }
-  },
-  {
-    id: '2',
-    type: 'rectangle',
-    data: { 
-      label: 'Rectangle Node',
-      categories: ['Design', 'Important']
-    },
-    position: { x: 100, y: 150 }
-  },
-  {
-    id: '3',
-    type: 'circle',
-    data: { 
-      label: 'Circle Node',
-      categories: ['Development']
-    },
-    position: { x: 400, y: 150 }
-  },
-  {
-    id: '4',
-    type: 'output',
-    data: { label: 'End' },
-    position: { x: 250, y: 300 }
-  }
-]
-
-// Initial edges for React Flow
-const initialEdges = [
-  { id: 'e1-2', source: '1', target: '2', animated: true },
-  { id: 'e1-3', source: '1', target: '3' },
-  { id: 'e2-4', source: '2', target: '4' },
-  { id: 'e3-4', source: '3', target: '4' }
-]
-
-function CanvasPage() {
+function CanvasPage({ userId }: CanvasPageProps) {
+  // UI State
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
   const sidebarWidth = sidebarCollapsed ? 0 : 280
   const rightSidebarWidth = rightSidebarCollapsed ? 0 : 300
+
+  // Selection State
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
+  const [selectedMainItemId, setSelectedMainItemId] = useState<string | null>(null)
+  const [selectedSubItemId, setSelectedSubItemId] = useState<string | null>(null)
+
+  // Firebase Hooks
+  const { project, isLoading: projectLoading } = useProject(userId)
+  const { files, isLoading: filesLoading, createFile } = useFiles(project?.id || null, userId)
+  const { mainItems, isLoading: hierarchyLoading, branchVariation, promoteToMain } = useHierarchy(selectedFileId)
+  const { 
+    canvasState, 
+    isLoading: canvasLoading, 
+    isSaving,
+    updateCanvas 
+  } = useCanvas(selectedFileId, selectedMainItemId, selectedSubItemId, {
+    autoSave: true,
+    autoSaveDelay: 1000 // milliseconds (1 second) - adjust as needed
+  })
+
+  // React Flow State
+  const [nodes, setNodes, onNodesChange] = useNodesState([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState([])
+  const [nodeIdCounter, setNodeIdCounter] = useState(1)
   
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
-  const [nodeIdCounter, setNodeIdCounter] = useState(5)
-  
+  // Track if we're currently loading canvas state to prevent auto-save during load
+  const isLoadingCanvas = useRef(false)
+  // Track the last canvas state we loaded to prevent reloading after saves
+  const lastLoadedCanvasState = useRef<string | null>(null)
+
+  // Auto-select first file when files load (only if files exist)
+  useEffect(() => {
+    if (files.length > 0 && !selectedFileId) {
+      setSelectedFileId(files[0].id)
+    }
+  }, [files, selectedFileId])
+
+  // Auto-select first main item and default sub-item when hierarchy loads
+  useEffect(() => {
+    if (mainItems.length > 0 && !selectedMainItemId) {
+      const firstMainItem = mainItems[0]
+      setSelectedMainItemId(firstMainItem.id)
+      setSelectedSubItemId(firstMainItem.data.defaultSubItemId)
+    }
+  }, [mainItems, selectedMainItemId])
+
+  // Load canvas state into React Flow (only on initial load or file/item change)
+  useEffect(() => {
+    if (canvasState) {
+      // Create a unique key for this canvas state based on file/main/sub IDs
+      const canvasKey = `${selectedFileId}-${selectedMainItemId}-${selectedSubItemId}`
+      
+      // Only reload if this is a new canvas (different file/item) or first load
+      if (lastLoadedCanvasState.current !== canvasKey) {
+        console.log('[CanvasPage] Loading canvas state:', canvasState.nodes.length, 'nodes')
+        isLoadingCanvas.current = true
+        lastLoadedCanvasState.current = canvasKey
+        
+        setNodes(canvasState.nodes)
+        setEdges(canvasState.edges)
+        
+        // Set node counter to max ID + 1
+        if (canvasState.nodes.length > 0) {
+          const maxId = Math.max(...canvasState.nodes.map(n => parseInt(n.id) || 0))
+          setNodeIdCounter(maxId + 1)
+        }
+        
+        // Allow saves after a short delay
+        setTimeout(() => {
+          isLoadingCanvas.current = false
+        }, 100)
+      }
+    }
+  }, [canvasState, selectedFileId, selectedMainItemId, selectedSubItemId, setNodes, setEdges])
+
+  // Save canvas state on changes (debounced by useCanvas hook)
+  useEffect(() => {
+    // Skip if currently loading canvas state
+    if (isLoadingCanvas.current) {
+      return
+    }
+
+    // Skip if no file/item selected
+    if (!selectedFileId || !selectedMainItemId || !selectedSubItemId) {
+      return
+    }
+
+    // Skip if no nodes (empty canvas on first load)
+    if (nodes.length === 0 && edges.length === 0) {
+      return
+    }
+
+    console.log('[CanvasPage] Canvas changed, scheduling auto-save')
+    updateCanvas({
+      nodes,
+      edges,
+      viewport: { x: 0, y: 0, zoom: 1 }
+    })
+  }, [nodes, edges, selectedFileId, selectedMainItemId, selectedSubItemId, updateCanvas])
+
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
@@ -233,7 +241,8 @@ function CanvasPage() {
     setNodeIdCounter((id) => id + 1)
   }, [nodeIdCounter, setNodes])
 
-  const formatDate = (date: Date) => {
+  const formatDate = (timestamp: Timestamp) => {
+    const date = timestamp.toDate()
     const now = new Date()
     const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
     
@@ -244,6 +253,52 @@ function CanvasPage() {
     } else {
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     }
+  }
+
+  const handleFileSelect = (fileId: string) => {
+    setSelectedFileId(fileId)
+    setSelectedMainItemId(null)
+    setSelectedSubItemId(null)
+  }
+
+  const handleSubItemSelect = (mainItemId: string, subItemId: string) => {
+    setSelectedMainItemId(mainItemId)
+    setSelectedSubItemId(subItemId)
+  }
+
+  const handleBranchSubItem = async (mainItemId: string, subItemId: string) => {
+    const count = mainItems.find(m => m.id === mainItemId)?.subItems.length || 0
+    const newSubItemId = await branchVariation(mainItemId, subItemId, `Var ${count + 1}`)
+    if (newSubItemId) {
+      setSelectedMainItemId(mainItemId)
+      setSelectedSubItemId(newSubItemId)
+    }
+  }
+
+  const handlePromoteSubItem = async (mainItemId: string, subItemId: string) => {
+    const subItemName = mainItems
+      .find(m => m.id === mainItemId)
+      ?.subItems.find(s => s.id === subItemId)?.data.name || 'Var'
+    
+    const result = await promoteToMain(mainItemId, subItemId, `Main-${subItemName}`)
+    if (result) {
+      setSelectedMainItemId(result.mainItemId)
+      setSelectedSubItemId(result.subItemId)
+    }
+  }
+
+  const selectedFile = files.find(f => f.id === selectedFileId)
+
+  // Show loading state
+  if (projectLoading || filesLoading) {
+    return (
+      <Box style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <Stack align="center" gap="md">
+          <Loader size="lg" />
+          <Text c="dimmed">Loading ThinkPost...</Text>
+        </Stack>
+      </Box>
+    )
   }
 
   return (
@@ -287,18 +342,22 @@ function CanvasPage() {
         </Text>
 
         {/* Middle: Post Title */}
-        <Text
-          size="lg"
-          fw={500}
-          style={{
-            flex: '1 1 auto',
-            textAlign: 'center',
-            color: '#666',
-            fontSize: '16px'
-          }}
-        >
-          Untitled Post
-        </Text>
+        <Flex align="center" gap="sm" style={{ flex: '1 1 auto', justifyContent: 'center' }}>
+          <Text
+            size="lg"
+            fw={500}
+            style={{
+              textAlign: 'center',
+              color: selectedFile ? '#666' : '#adb5bd',
+              fontSize: '16px'
+            }}
+          >
+            {selectedFile?.data.name || 'No File Selected'}
+          </Text>
+          {isSaving && selectedFile && (
+            <Loader size="xs" />
+          )}
+        </Flex>
 
         {/* Right: User Button */}
         <ActionIcon
@@ -315,7 +374,7 @@ function CanvasPage() {
 
       {/* Main content area with sidebar */}
       <Flex style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-        {/* Sidebar */}
+        {/* Left Sidebar - Files */}
         <Box
           style={{
             width: sidebarWidth,
@@ -329,43 +388,70 @@ function CanvasPage() {
         >
           {!sidebarCollapsed && (
             <Box style={{ padding: '16px', overflow: 'auto', flex: 1 }}>
-              <Text size="sm" fw={600} mb="md" style={{ color: '#666' }}>
-                Recent Files
-              </Text>
-              <Stack gap="xs">
-                {mockFiles.map((file) => (
-                  <Paper
-                    key={file.id}
-                    p="sm"
-                    style={{
-                      cursor: 'pointer',
-                      border: '1px solid #e9ecef',
-                      transition: 'all 0.2s ease',
-                      backgroundColor: 'white'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#f8f9fa'
-                      e.currentTarget.style.borderColor = '#dee2e6'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'white'
-                      e.currentTarget.style.borderColor = '#e9ecef'
-                    }}
-                  >
-                    <Group gap="sm" wrap="nowrap">
-                      <IconFileText size={20} style={{ color: '#868e96', flexShrink: 0 }} />
-                      <Box style={{ flex: 1, minWidth: 0 }}>
-                        <Text size="sm" fw={500} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {file.name}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                          {formatDate(file.lastUpdated)}
-                        </Text>
-                      </Box>
-                    </Group>
-                  </Paper>
-                ))}
-              </Stack>
+              <Flex justify="space-between" align="center" mb="md">
+                <Text size="sm" fw={600} style={{ color: '#666' }}>
+                  Recent Files
+                </Text>
+                <ActionIcon
+                  size="sm"
+                  variant="subtle"
+                  onClick={() => createFile('Untitled')}
+                  title="New File"
+                >
+                  <IconPlus size={16} />
+                </ActionIcon>
+              </Flex>
+              
+              {filesLoading ? (
+                <Flex justify="center" py="xl">
+                  <Loader size="sm" />
+                </Flex>
+              ) : files.length === 0 ? (
+                <Text size="sm" c="dimmed" ta="center" py="xl">
+                  No files yet
+                </Text>
+              ) : (
+                <Stack gap="xs">
+                  {files.map((file) => (
+                    <Paper
+                      key={file.id}
+                      p="sm"
+                      style={{
+                        cursor: 'pointer',
+                        border: '1px solid #e9ecef',
+                        transition: 'all 0.2s ease',
+                        backgroundColor: selectedFileId === file.id ? '#f8f9fa' : 'white',
+                        borderColor: selectedFileId === file.id ? '#dee2e6' : '#e9ecef'
+                      }}
+                      onClick={() => handleFileSelect(file.id)}
+                      onMouseEnter={(e) => {
+                        if (selectedFileId !== file.id) {
+                          e.currentTarget.style.backgroundColor = '#f8f9fa'
+                          e.currentTarget.style.borderColor = '#dee2e6'
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (selectedFileId !== file.id) {
+                          e.currentTarget.style.backgroundColor = 'white'
+                          e.currentTarget.style.borderColor = '#e9ecef'
+                        }
+                      }}
+                    >
+                      <Group gap="sm" wrap="nowrap">
+                        <IconFileText size={20} style={{ color: '#868e96', flexShrink: 0 }} />
+                        <Box style={{ flex: 1, minWidth: 0 }}>
+                          <Text size="sm" fw={500} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {file.data.name}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {formatDate(file.data.updatedAt)}
+                          </Text>
+                        </Box>
+                      </Group>
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
             </Box>
           )}
         </Box>
@@ -398,62 +484,115 @@ function CanvasPage() {
             position: 'relative'
           }}
         >
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            nodeTypes={nodeTypes}
-            fitView
-          >
-            <Background />
-            <Controls />
-            <MiniMap />
-          </ReactFlow>
+          {!selectedFileId ? (
+            // No file selected - show empty state with icon-only toolbar
+            <Flex justify="center" align="center" style={{ height: '100%', flexDirection: 'column', gap: '24px' }}>
+              <Stack align="center" gap="md">
+                <IconFileText size={64} style={{ color: '#adb5bd' }} />
+                <Text size="lg" c="dimmed">
+                  Select a file to start working
+                </Text>
+                <Text size="sm" c="dimmed">
+                  Or create a new file using the + button
+                </Text>
+              </Stack>
 
-          {/* Floating Toolbar */}
-          <Paper
-            shadow="md"
-            p="md"
-            style={{
-              position: 'absolute',
-              top: '20px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              zIndex: 5,
-              display: 'flex',
-              gap: '12px',
-              alignItems: 'center',
-              backgroundColor: 'white',
-              borderRadius: '8px'
-            }}
-          >
-            <Text size="sm" fw={600} style={{ color: '#666' }}>
-              Add Node:
-            </Text>
-            <Button
-              leftSection={<IconSquare size={18} />}
-              variant="light"
-              color="blue"
-              size="sm"
-              onClick={() => addNode('rectangle')}
-            >
-              Rectangle
-            </Button>
-            <Button
-              leftSection={<IconCircle size={18} />}
-              variant="light"
-              color="teal"
-              size="sm"
-              onClick={() => addNode('circle')}
-            >
-              Circle
-            </Button>
-          </Paper>
+              {/* Icon-only toolbar when no file selected */}
+              <Paper
+                shadow="md"
+                p="sm"
+                style={{
+                  display: 'flex',
+                  gap: '8px',
+                  alignItems: 'center',
+                  backgroundColor: 'white',
+                  borderRadius: '8px'
+                }}
+              >
+                <ActionIcon
+                  size="lg"
+                  variant="light"
+                  color="blue"
+                  disabled
+                  title="Rectangle"
+                >
+                  <IconSquare size={20} />
+                </ActionIcon>
+                <ActionIcon
+                  size="lg"
+                  variant="light"
+                  color="teal"
+                  disabled
+                  title="Circle"
+                >
+                  <IconCircle size={20} />
+                </ActionIcon>
+              </Paper>
+            </Flex>
+          ) : canvasLoading ? (
+            <Flex justify="center" align="center" style={{ height: '100%' }}>
+              <Stack align="center" gap="md">
+                <Loader size="lg" />
+                <Text c="dimmed">Loading canvas...</Text>
+              </Stack>
+            </Flex>
+          ) : (
+            <>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                nodeTypes={nodeTypes}
+                fitView
+              >
+                <Background />
+                <Controls />
+                <MiniMap />
+              </ReactFlow>
+
+              {/* Floating Toolbar - Icon-only buttons */}
+              <Paper
+                shadow="md"
+                p="sm"
+                style={{
+                  position: 'absolute',
+                  top: '20px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  zIndex: 5,
+                  display: 'flex',
+                  gap: '8px',
+                  alignItems: 'center',
+                  backgroundColor: 'white',
+                  borderRadius: '8px'
+                }}
+              >
+                <ActionIcon
+                  size="lg"
+                  variant="light"
+                  color="blue"
+                  onClick={() => addNode('rectangle')}
+                  title="Add Rectangle"
+                >
+                  <IconSquare size={20} />
+                </ActionIcon>
+                <ActionIcon
+                  size="lg"
+                  variant="light"
+                  color="teal"
+                  onClick={() => addNode('circle')}
+                  title="Add Circle"
+                >
+                  <IconCircle size={20} />
+                </ActionIcon>
+              </Paper>
+            </>
+          )}
         </Box>
 
-        {/* Right Sidebar */}
+        {/* Right Sidebar - Hierarchy */}
         <Box
           style={{
             width: rightSidebarWidth,
@@ -470,108 +609,130 @@ function CanvasPage() {
               <Text size="sm" fw={600} mb="md" style={{ color: '#666' }}>
                 Hierarchy
               </Text>
-              <Stack gap="xs">
-                {mockHierarchy.map((mainItem) => (
-                  <Box key={mainItem.id}>
-                    {/* Main Item */}
-                    <Paper
-                      p="xs"
-                      style={{
-                        cursor: 'pointer',
-                        border: '1px solid #e9ecef',
-                        transition: 'all 0.2s ease',
-                        backgroundColor: 'white',
-                        marginBottom: mainItem.subItems && mainItem.subItems.length > 0 ? '4px' : '0'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f8f9fa'
-                        e.currentTarget.style.borderColor = '#dee2e6'
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'white'
-                        e.currentTarget.style.borderColor = '#e9ecef'
-                      }}
-                    >
-                      <Group gap="xs" wrap="nowrap" style={{ justifyContent: 'space-between' }}>
-                        <Group gap="xs" wrap="nowrap">
-                          <IconGitBranch size={16} style={{ color: '#868e96', flexShrink: 0 }} />
-                          <Text size="sm" fw={500}>
-                            {mainItem.name}
-                          </Text>
+              
+              {!selectedFileId ? (
+                <Text size="sm" c="dimmed" ta="center" py="xl">
+                  Select a file to view hierarchy
+                </Text>
+              ) : hierarchyLoading ? (
+                <Flex justify="center" py="xl">
+                  <Loader size="sm" />
+                </Flex>
+              ) : mainItems.length === 0 ? (
+                <Text size="sm" c="dimmed" ta="center" py="xl">
+                  No hierarchy yet
+                </Text>
+              ) : (
+                <Stack gap="xs">
+                  {mainItems.map((mainItem) => (
+                    <Box key={mainItem.id}>
+                      {/* Main Item */}
+                      <Paper
+                        p="xs"
+                        style={{
+                          cursor: 'pointer',
+                          border: '1px solid #e9ecef',
+                          transition: 'all 0.2s ease',
+                          backgroundColor: 'white',
+                          marginBottom: mainItem.subItems && mainItem.subItems.length > 0 ? '4px' : '0'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#f8f9fa'
+                          e.currentTarget.style.borderColor = '#dee2e6'
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'white'
+                          e.currentTarget.style.borderColor = '#e9ecef'
+                        }}
+                      >
+                        <Group gap="xs" wrap="nowrap" style={{ justifyContent: 'space-between' }}>
+                          <Group gap="xs" wrap="nowrap">
+                            <IconGitBranch size={16} style={{ color: '#868e96', flexShrink: 0 }} />
+                            <Text size="sm" fw={500}>
+                              {mainItem.data.name}
+                            </Text>
+                          </Group>
                         </Group>
-                        <ActionIcon
-                          size="xs"
-                          variant="subtle"
-                          color="gray"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            console.log('Branch from:', mainItem.name)
-                          }}
-                        >
-                          <IconGitFork size={14} />
-                        </ActionIcon>
-                      </Group>
-                    </Paper>
+                      </Paper>
 
-                    {/* Sub Items */}
-                    {mainItem.subItems && mainItem.subItems.length > 0 && (
-                      <Stack gap="xs" style={{ marginLeft: '20px', marginBottom: '8px' }}>
-                        {mainItem.subItems.map((subItem) => (
-                          <Box key={subItem.id} style={{ position: 'relative' }}>
-                            {/* Branch line visualization */}
-                            <Box
-                              style={{
-                                position: 'absolute',
-                                left: '-12px',
-                                top: '0',
-                                width: '12px',
-                                height: '50%',
-                                borderLeft: '2px solid #dee2e6',
-                                borderBottom: '2px solid #dee2e6',
-                                borderBottomLeftRadius: '8px'
-                              }}
-                            />
-                            <Paper
-                              p="xs"
-                              style={{
-                                cursor: 'pointer',
-                                border: '1px solid #e9ecef',
-                                transition: 'all 0.2s ease',
-                                backgroundColor: 'white'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = '#f8f9fa'
-                                e.currentTarget.style.borderColor = '#dee2e6'
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = 'white'
-                                e.currentTarget.style.borderColor = '#e9ecef'
-                              }}
-                            >
-                              <Group gap="xs" wrap="nowrap" style={{ justifyContent: 'space-between' }}>
-                                <Text size="sm" c="dimmed" style={{ flex: 1 }}>
-                                  {subItem.name}
-                                </Text>
-                                <ActionIcon
-                                  size="xs"
-                                  variant="subtle"
-                                  color="gray"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    console.log('Branch from:', subItem.name)
-                                  }}
-                                >
-                                  <IconGitFork size={14} />
-                                </ActionIcon>
-                              </Group>
-                            </Paper>
-                          </Box>
-                        ))}
-                      </Stack>
-                    )}
-                  </Box>
-                ))}
-              </Stack>
+                      {/* Sub Items */}
+                      {mainItem.subItems && mainItem.subItems.length > 0 && (
+                        <Stack gap="xs" style={{ marginLeft: '20px', marginBottom: '8px' }}>
+                          {mainItem.subItems.map((subItem) => (
+                            <Box key={subItem.id} style={{ position: 'relative' }}>
+                              {/* Branch line visualization */}
+                              <Box
+                                style={{
+                                  position: 'absolute',
+                                  left: '-12px',
+                                  top: '0',
+                                  width: '12px',
+                                  height: '50%',
+                                  borderLeft: '2px solid #dee2e6',
+                                  borderBottom: '2px solid #dee2e6',
+                                  borderBottomLeftRadius: '8px'
+                                }}
+                              />
+                              <Paper
+                                p="xs"
+                                style={{
+                                  cursor: 'pointer',
+                                  border: '1px solid #e9ecef',
+                                  transition: 'all 0.2s ease',
+                                  backgroundColor: 
+                                    selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id 
+                                      ? '#e7f5ff' 
+                                      : 'white',
+                                  borderColor:
+                                    selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id
+                                      ? '#339af0'
+                                      : '#e9ecef'
+                                }}
+                                onClick={() => handleSubItemSelect(mainItem.id, subItem.id)}
+                                onMouseEnter={(e) => {
+                                  if (!(selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id)) {
+                                    e.currentTarget.style.backgroundColor = '#f8f9fa'
+                                    e.currentTarget.style.borderColor = '#dee2e6'
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!(selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id)) {
+                                    e.currentTarget.style.backgroundColor = 'white'
+                                    e.currentTarget.style.borderColor = '#e9ecef'
+                                  }
+                                }}
+                              >
+                                <Group gap="xs" wrap="nowrap" style={{ justifyContent: 'space-between' }}>
+                                  <Text size="sm" c="dimmed" style={{ flex: 1 }}>
+                                    {subItem.data.name}
+                                    {subItem.data.isDefault && (
+                                      <Text component="span" size="xs" c="blue" ml={4}>
+                                        (default)
+                                      </Text>
+                                    )}
+                                  </Text>
+                                  <ActionIcon
+                                    size="xs"
+                                    variant="subtle"
+                                    color="gray"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleBranchSubItem(mainItem.id, subItem.id)
+                                    }}
+                                    title="Branch variation"
+                                  >
+                                    <IconGitFork size={14} />
+                                  </ActionIcon>
+                                </Group>
+                              </Paper>
+                            </Box>
+                          ))}
+                        </Stack>
+                      )}
+                    </Box>
+                  ))}
+                </Stack>
+              )}
             </Box>
           )}
         </Box>
@@ -596,9 +757,11 @@ function CanvasPage() {
           {rightSidebarCollapsed ? <IconChevronLeft size={18} /> : <IconChevronRight size={18} />}
         </ActionIcon>
       </Flex>
+
+      {/* Auth Debug Panel - Remove in production */}
+      <AuthDebugPanel />
     </Box>
   )
 }
 
 export default CanvasPage
-
