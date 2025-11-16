@@ -45,7 +45,9 @@ export const useHierarchy = (fileId: string | null) => {
 
     try {
       console.log('[useHierarchy] Loading hierarchy for file:', fileId)
-      setState(prev => ({ ...prev, isLoading: true, error: null }))
+      // Clear old items immediately when loading new file
+      setState({ mainItems: [], isLoading: true, error: null })
+      console.log('[useHierarchy] Cleared old mainItems, isLoading=true')
 
       // Get all main items
       const mainItems = await getFileMainItems(fileId)
@@ -62,6 +64,7 @@ export const useHierarchy = (fileId: string | null) => {
         })
       )
 
+      console.log('[useHierarchy] Setting', mainItemsWithSubItems.length, 'mainItems with subItems, isLoading=false')
       setState({ mainItems: mainItemsWithSubItems, isLoading: false, error: null })
     } catch (error: any) {
       console.error('[useHierarchy] Error loading hierarchy:', error)

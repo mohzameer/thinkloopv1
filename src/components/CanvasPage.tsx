@@ -369,6 +369,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const [selectedSubItemId, setSelectedSubItemId] = useState<string | null>(null)
 
   // Editing State
+  const [editingFileId, setEditingFileId] = useState<string | null>(null)
   const [editingMainItemId, setEditingMainItemId] = useState<string | null>(null)
   const [editingSubItemId, setEditingSubItemId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
@@ -379,7 +380,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
   // Firebase Hooks
   const { project, isLoading: projectLoading } = useProject(userId)
-  const { files, isLoading: filesLoading, createFile, updateTags: updateFileTagsLocal } = useFiles(project?.id || null, userId)
+  const { files, isLoading: filesLoading, createFile, renameFile, deleteFile, updateTags: updateFileTagsLocal } = useFiles(project?.id || null, userId)
   const { mainItems, isLoading: hierarchyLoading, branchVariation, promoteToMain, deleteSubItem, deleteMainItem, renameMainItem, renameSubItem } = useHierarchy(selectedFileId)
   const {
     canvasState,
@@ -468,12 +469,38 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
   // Auto-select first main item and default sub-item when hierarchy loads
   useEffect(() => {
-    if (mainItems.length > 0 && !selectedMainItemId) {
+    console.log('[CanvasPage] Auto-select check:', {
+      selectedFileId,
+      mainItemsCount: mainItems.length,
+      firstMainItemId: mainItems.length > 0 ? mainItems[0].id : null,
+      selectedMainItemId,
+      selectedSubItemId,
+      hierarchyLoading,
+      shouldAutoSelect: selectedFileId && mainItems.length > 0 && !selectedMainItemId && !hierarchyLoading
+    })
+
+    // Only auto-select if we have a file selected, hierarchy has loaded, and no main item is selected
+    if (selectedFileId && mainItems.length > 0 && !selectedMainItemId && !hierarchyLoading) {
       const firstMainItem = mainItems[0]
+      console.log('[CanvasPage] Auto-selecting first main item:', {
+        fileId: selectedFileId,
+        mainItemId: firstMainItem.id,
+        subItemId: firstMainItem.data.defaultSubItemId,
+        mainItemName: firstMainItem.data.name
+      })
       setSelectedMainItemId(firstMainItem.id)
       setSelectedSubItemId(firstMainItem.data.defaultSubItemId)
+    } else if (selectedFileId && mainItems.length > 0 && selectedMainItemId && !hierarchyLoading) {
+      // Check if current selection belongs to this file's hierarchy
+      const mainItemExists = mainItems.find(m => m.id === selectedMainItemId)
+      if (!mainItemExists) {
+        console.log('[CanvasPage] Selected main item not in current hierarchy, re-selecting first item')
+        const firstMainItem = mainItems[0]
+        setSelectedMainItemId(firstMainItem.id)
+        setSelectedSubItemId(firstMainItem.data.defaultSubItemId)
+      }
     }
-  }, [mainItems, selectedMainItemId])
+  }, [mainItems, selectedMainItemId, selectedFileId, hierarchyLoading])
 
   // Load canvas state into React Flow (only on initial load or file/item change)
   useEffect(() => {
@@ -715,9 +742,81 @@ function CanvasPage({ userId }: CanvasPageProps) {
   }
 
   const handleFileSelect = (fileId: string) => {
+    console.log('[CanvasPage] Selecting file:', fileId, '(clearing main/sub item selection)')
+    // Immediately mark as loading to prevent saves during transition
+    isLoadingCanvas.current = true
+    // Clear the current canvas key to prevent saves to old location
+    currentCanvasKey.current = null
+
     setSelectedFileId(fileId)
     setSelectedMainItemId(null)
     setSelectedSubItemId(null)
+    console.log('[CanvasPage] State updates queued - main/sub items set to null')
+  }
+
+  const handleCreateFile = async () => {
+    console.log('[CanvasPage] Creating new file...')
+
+    // Immediately mark as loading to prevent saves during transition
+    isLoadingCanvas.current = true
+    // Clear the current canvas key to prevent saves to old location
+    currentCanvasKey.current = null
+
+    const fileId = await createFile('Untitled')
+    if (fileId) {
+      console.log('[CanvasPage] New file created:', fileId)
+      // Select the newly created file
+      setSelectedFileId(fileId)
+      // Clear main/sub item selection - they will be auto-selected when hierarchy loads
+      setSelectedMainItemId(null)
+      setSelectedSubItemId(null)
+      console.log('[CanvasPage] File selected, waiting for hierarchy to load...')
+    }
+  }
+
+  const handleDeleteFile = async (fileId: string) => {
+    const file = files.find(f => f.id === fileId)
+    if (!file) return
+
+    // Confirm deletion
+    if (!confirm(`Delete "${file.data.name}"?\n\nThis will permanently delete the file and all its content.`)) {
+      return
+    }
+
+    console.log('[CanvasPage] Deleting file:', fileId)
+
+    // If this is the currently selected file, switch to another file first
+    if (selectedFileId === fileId) {
+      // Find a fallback file (prefer previous file in the list)
+      const currentIndex = files.findIndex(f => f.id === fileId)
+      const fallbackFile = currentIndex > 0
+        ? files[currentIndex - 1]
+        : files.length > 1 ? files[currentIndex + 1] : null
+
+      if (fallbackFile) {
+        console.log('[CanvasPage] Switching to fallback file:', fallbackFile.id)
+        // Immediately mark as loading to prevent saves during transition
+        isLoadingCanvas.current = true
+        currentCanvasKey.current = null
+        setSelectedFileId(fallbackFile.id)
+        setSelectedMainItemId(null)
+        setSelectedSubItemId(null)
+      } else {
+        // No other files, clear selection
+        console.log('[CanvasPage] No fallback file, clearing selection')
+        isLoadingCanvas.current = true
+        currentCanvasKey.current = null
+        setSelectedFileId(null)
+        setSelectedMainItemId(null)
+        setSelectedSubItemId(null)
+      }
+    }
+
+    // Delete the file
+    const success = await deleteFile(fileId)
+    if (success) {
+      console.log('[CanvasPage] File deleted successfully')
+    }
   }
 
   const handleSubItemSelect = (mainItemId: string, subItemId: string) => {
@@ -873,6 +972,12 @@ function CanvasPage({ userId }: CanvasPageProps) {
   }
 
   // Rename handlers
+  const handleFileDoubleClick = (fileId: string, currentName: string) => {
+    console.log('[CanvasPage] Starting edit for file:', fileId)
+    setEditingFileId(fileId)
+    setEditingName(currentName)
+  }
+
   const handleMainItemDoubleClick = (mainItemId: string, currentName: string) => {
     console.log('[CanvasPage] Starting edit for main item:', mainItemId)
     setEditingMainItemId(mainItemId)
@@ -884,6 +989,20 @@ function CanvasPage({ userId }: CanvasPageProps) {
     setEditingMainItemId(mainItemId)
     setEditingSubItemId(subItemId)
     setEditingName(currentName)
+  }
+
+  const handleSaveFileName = async (fileId: string) => {
+    if (!editingName.trim()) {
+      setEditingFileId(null)
+      return
+    }
+
+    console.log('[CanvasPage] Saving file name:', editingName)
+    const success = await renameFile(fileId, editingName.trim())
+    if (success) {
+      setEditingFileId(null)
+      setEditingName('')
+    }
   }
 
   const handleSaveMainItemName = async (mainItemId: string) => {
@@ -917,6 +1036,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
   }
 
   const handleCancelEdit = () => {
+    setEditingFileId(null)
     setEditingMainItemId(null)
     setEditingSubItemId(null)
     setEditingName('')
@@ -1028,7 +1148,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
                 <ActionIcon
                   size="sm"
                   variant="subtle"
-                  onClick={() => createFile('Untitled')}
+                  onClick={handleCreateFile}
                   title="New File"
                 >
                   <IconPlus size={16} />
@@ -1057,29 +1177,75 @@ function CanvasPage({ userId }: CanvasPageProps) {
                         borderColor: selectedFileId === file.id ? '#dee2e6' : '#e9ecef'
                       }}
                       onClick={() => handleFileSelect(file.id)}
+                      onDoubleClick={() => handleFileDoubleClick(file.id, file.data.name)}
                       onMouseEnter={(e) => {
-                        if (selectedFileId !== file.id) {
+                        if (selectedFileId !== file.id && editingFileId !== file.id) {
                           e.currentTarget.style.backgroundColor = '#f8f9fa'
                           e.currentTarget.style.borderColor = '#dee2e6'
                         }
                       }}
                       onMouseLeave={(e) => {
-                        if (selectedFileId !== file.id) {
+                        if (selectedFileId !== file.id && editingFileId !== file.id) {
                           e.currentTarget.style.backgroundColor = 'white'
                           e.currentTarget.style.borderColor = '#e9ecef'
                         }
                       }}
                     >
-                      <Group gap="sm" wrap="nowrap">
-                        <IconFileText size={20} style={{ color: '#868e96', flexShrink: 0 }} />
-                        <Box style={{ flex: 1, minWidth: 0 }}>
-                          <Text size="sm" fw={500} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {file.data.name}
-                          </Text>
-                          <Text size="xs" c="dimmed">
-                            {formatDate(file.data.updatedAt)}
-                          </Text>
-                        </Box>
+                      <Group gap="sm" wrap="nowrap" style={{ justifyContent: 'space-between' }}>
+                        <Group gap="sm" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+                          <IconFileText size={20} style={{ color: '#868e96', flexShrink: 0 }} />
+                          <Box style={{ flex: 1, minWidth: 0 }}>
+                            {editingFileId === file.id ? (
+                              <TextInput
+                                value={editingName}
+                                onChange={(e) => setEditingName(e.currentTarget.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleSaveFileName(file.id)
+                                  } else if (e.key === 'Escape') {
+                                    handleCancelEdit()
+                                  }
+                                  e.stopPropagation()
+                                }}
+                                onBlur={() => handleSaveFileName(file.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                size="xs"
+                                autoFocus
+                                styles={{
+                                  input: {
+                                    fontSize: '14px',
+                                    fontWeight: 500,
+                                    padding: '2px 6px'
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <>
+                                <Text size="sm" fw={500} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {file.data.name}
+                                </Text>
+                                <Text size="xs" c="dimmed">
+                                  {formatDate(file.data.updatedAt)}
+                                </Text>
+                              </>
+                            )}
+                          </Box>
+                        </Group>
+                        {editingFileId !== file.id && (
+                          <ActionIcon
+                            size="xs"
+                            variant="subtle"
+                            color="red"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteFile(file.id)
+                            }}
+                            title="Delete file"
+                            style={{ flexShrink: 0 }}
+                          >
+                            <IconTrash size={14} />
+                          </ActionIcon>
+                        )}
                       </Group>
                     </Paper>
                   ))}
@@ -1357,134 +1523,142 @@ function CanvasPage({ userId }: CanvasPageProps) {
                       {/* Sub Items */}
                       {mainItem.subItems && mainItem.subItems.length > 0 && (
                         <Stack gap="xs" style={{ marginLeft: '20px', marginBottom: '8px' }}>
-                          {mainItem.subItems.map((subItem) => (
-                            <Box key={subItem.id} style={{ position: 'relative' }}>
-                              {/* Branch line visualization */}
-                              <Box
-                                style={{
-                                  position: 'absolute',
-                                  left: '-12px',
-                                  top: '0',
-                                  width: '12px',
-                                  height: '50%',
-                                  borderLeft: '2px solid #dee2e6',
-                                  borderBottom: '2px solid #dee2e6',
-                                  borderBottomLeftRadius: '8px'
-                                }}
-                              />
-                              <Paper
-                                p="xs"
-                                style={{
-                                  cursor: 'pointer',
-                                  border: '1px solid #e9ecef',
-                                  transition: 'all 0.1s ease',
-                                  backgroundColor:
-                                    selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id
-                                      ? '#e7f5ff'
-                                      : 'white',
-                                  borderColor:
-                                    selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id
-                                      ? '#339af0'
-                                      : '#e9ecef'
-                                }}
-                                onClick={() => handleSubItemSelect(mainItem.id, subItem.id)}
-                                onDoubleClick={(e) => {
-                                  e.stopPropagation()
-                                  handleSubItemDoubleClick(mainItem.id, subItem.id, subItem.data.name)
-                                }}
-                                onMouseEnter={(e) => {
-                                  if (!(selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id) &&
-                                    !(editingMainItemId === mainItem.id && editingSubItemId === subItem.id)) {
-                                    e.currentTarget.style.backgroundColor = '#f8f9fa'
-                                    e.currentTarget.style.borderColor = '#dee2e6'
-                                  }
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (!(selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id) &&
-                                    !(editingMainItemId === mainItem.id && editingSubItemId === subItem.id)) {
-                                    e.currentTarget.style.backgroundColor = 'white'
-                                    e.currentTarget.style.borderColor = '#e9ecef'
-                                  }
-                                }}
-                              >
-                                <Group gap="xs" wrap="nowrap" style={{ justifyContent: 'space-between' }}>
-                                  {editingMainItemId === mainItem.id && editingSubItemId === subItem.id ? (
-                                    <TextInput
-                                      value={editingName}
-                                      onChange={(e) => setEditingName(e.currentTarget.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          handleSaveSubItemName(mainItem.id, subItem.id)
-                                        } else if (e.key === 'Escape') {
-                                          handleCancelEdit()
-                                        }
-                                        e.stopPropagation()
-                                      }}
-                                      onBlur={() => handleSaveSubItemName(mainItem.id, subItem.id)}
-                                      onClick={(e) => e.stopPropagation()}
-                                      size="xs"
-                                      autoFocus
-                                      style={{ flex: 1 }}
-                                      styles={{
-                                        input: {
-                                          fontSize: '14px',
-                                          padding: '2px 6px',
-                                          color: '#666'
-                                        }
-                                      }}
-                                    />
-                                  ) : (
-                                    <Text size="sm" c="dimmed" style={{ flex: 1 }}>
-                                      {subItem.data.name}
-                                      {subItem.data.isDefault && (
-                                        <Text component="span" size="xs" c="blue" ml={4}>
-                                          (default)
-                                        </Text>
-                                      )}
-                                    </Text>
-                                  )}
-                                  <Group gap={4} wrap="nowrap">
-                                    <ActionIcon
-                                      size="xs"
-                                      variant="subtle"
-                                      color="blue"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handleDuplicateSubItem(mainItem.id, subItem.id)
-                                      }}
-                                      title="Duplicate variation (create copy in same branch)"
-                                    >
-                                      <IconCopy size={14} />
-                                    </ActionIcon>
-                                    <ActionIcon
-                                      size="xs"
-                                      variant="subtle"
-                                      color="gray"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handleBranchSubItem(mainItem.id, subItem.id)
-                                      }}
-                                      title="Branch off as new main branch"
-                                    >
-                                      <IconGitFork size={14} />
-                                    </ActionIcon>
-                                    <ActionIcon
-                                      size="xs"
-                                      variant="subtle"
-                                      color="red"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handleDeleteSubItem(mainItem.id, subItem.id)
-                                      }}
-                                      title="Delete variation"
-                                    >
-                                      <IconTrash size={14} />
-                                    </ActionIcon>
+                          {mainItem.subItems.map((subItem) => {
+                            const isSelected = selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id
+                            // Debug logging - log ALL sub-items to see selection state
+                            console.log('[CanvasPage] Rendering sub-item:', {
+                              subItemId: subItem.id,
+                              subItemName: subItem.data.name,
+                              mainItemId: mainItem.id,
+                              mainItemName: mainItem.data.name,
+                              selectedMainItemId,
+                              selectedSubItemId,
+                              isSelected,
+                              isDefault: subItem.data.isDefault
+                            })
+                            return (
+                              <Box key={subItem.id} style={{ position: 'relative' }}>
+                                {/* Branch line visualization */}
+                                <Box
+                                  style={{
+                                    position: 'absolute',
+                                    left: '-12px',
+                                    top: '0',
+                                    width: '12px',
+                                    height: '50%',
+                                    borderLeft: '2px solid #dee2e6',
+                                    borderBottom: '2px solid #dee2e6',
+                                    borderBottomLeftRadius: '8px'
+                                  }}
+                                />
+                                <Paper
+                                  p="xs"
+                                  style={{
+                                    cursor: 'pointer',
+                                    border: '1px solid #e9ecef',
+                                    transition: 'all 0.1s ease',
+                                    backgroundColor: isSelected ? '#e7f5ff' : 'white',
+                                    borderColor: isSelected ? '#339af0' : '#e9ecef'
+                                  }}
+                                  onClick={() => handleSubItemSelect(mainItem.id, subItem.id)}
+                                  onDoubleClick={(e) => {
+                                    e.stopPropagation()
+                                    handleSubItemDoubleClick(mainItem.id, subItem.id, subItem.data.name)
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    const isEditing = editingMainItemId === mainItem.id && editingSubItemId === subItem.id
+                                    if (!isSelected && !isEditing) {
+                                      e.currentTarget.style.backgroundColor = '#f8f9fa'
+                                      e.currentTarget.style.borderColor = '#dee2e6'
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    const isEditing = editingMainItemId === mainItem.id && editingSubItemId === subItem.id
+                                    if (!isSelected && !isEditing) {
+                                      e.currentTarget.style.backgroundColor = 'white'
+                                      e.currentTarget.style.borderColor = '#e9ecef'
+                                    }
+                                  }}
+                                >
+                                  <Group gap="xs" wrap="nowrap" style={{ justifyContent: 'space-between' }}>
+                                    {editingMainItemId === mainItem.id && editingSubItemId === subItem.id ? (
+                                      <TextInput
+                                        value={editingName}
+                                        onChange={(e) => setEditingName(e.currentTarget.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            handleSaveSubItemName(mainItem.id, subItem.id)
+                                          } else if (e.key === 'Escape') {
+                                            handleCancelEdit()
+                                          }
+                                          e.stopPropagation()
+                                        }}
+                                        onBlur={() => handleSaveSubItemName(mainItem.id, subItem.id)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        size="xs"
+                                        autoFocus
+                                        style={{ flex: 1 }}
+                                        styles={{
+                                          input: {
+                                            fontSize: '14px',
+                                            padding: '2px 6px',
+                                            color: '#666'
+                                          }
+                                        }}
+                                      />
+                                    ) : (
+                                      <Text size="sm" c="dimmed" style={{ flex: 1 }}>
+                                        {subItem.data.name}
+                                        {subItem.data.isDefault && (
+                                          <Text component="span" size="xs" c="blue" ml={4}>
+                                            (default)
+                                          </Text>
+                                        )}
+                                      </Text>
+                                    )}
+                                    <Group gap={4} wrap="nowrap">
+                                      <ActionIcon
+                                        size="xs"
+                                        variant="subtle"
+                                        color="blue"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleDuplicateSubItem(mainItem.id, subItem.id)
+                                        }}
+                                        title="Duplicate variation (create copy in same branch)"
+                                      >
+                                        <IconCopy size={14} />
+                                      </ActionIcon>
+                                      <ActionIcon
+                                        size="xs"
+                                        variant="subtle"
+                                        color="gray"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleBranchSubItem(mainItem.id, subItem.id)
+                                        }}
+                                        title="Branch off as new main branch"
+                                      >
+                                        <IconGitFork size={14} />
+                                      </ActionIcon>
+                                      <ActionIcon
+                                        size="xs"
+                                        variant="subtle"
+                                        color="red"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleDeleteSubItem(mainItem.id, subItem.id)
+                                        }}
+                                        title="Delete variation"
+                                      >
+                                        <IconTrash size={14} />
+                                      </ActionIcon>
+                                    </Group>
                                   </Group>
-                                </Group>
-                              </Paper>
-                            </Box>
-                          ))}
+                                </Paper>
+                              </Box>
+                            )
+                          })}
                         </Stack>
                       )}
                     </Box>
