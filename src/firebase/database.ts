@@ -22,7 +22,8 @@ import type {
   NewProject,
   NewFile,
   NewMainItem,
-  NewSubItem
+  NewSubItem,
+  Tag
 } from '../types/firebase'
 
 // ============================================================================
@@ -157,7 +158,7 @@ export const getFile = async (fileId: string): Promise<{ id: string; data: FileD
 }
 
 /**
- * Create a new file
+ * Create a new file with default tags
  */
 export const createFile = async (
   projectId: string,
@@ -167,10 +168,18 @@ export const createFile = async (
   try {
     const fileRef = doc(collection(db, 'files'))
     
+    // Default tags with fixed colors
+    const defaultTags: Tag[] = [
+      { name: 'Idea', color: '#fab005' },      // yellow
+      { name: 'New', color: '#228be6' },       // blue
+      { name: 'Thinking', color: '#be4bdb' },  // purple
+    ]
+    
     await setDoc(fileRef, {
       projectId,
       userId,
       name: fileName || 'Untitled',
+      tags: defaultTags,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     })
@@ -200,6 +209,23 @@ export const updateFileName = async (fileId: string, newName: string): Promise<v
     console.log('[Database] File name updated:', fileId)
   } catch (error) {
     console.error('[Database] Error updating file name:', error)
+    throw error
+  }
+}
+
+/**
+ * Update a file's tags
+ */
+export const updateFileTags = async (fileId: string, tags: Tag[]): Promise<void> => {
+  try {
+    const fileRef = doc(db, 'files', fileId)
+    await updateDoc(fileRef, {
+      tags,
+      updatedAt: serverTimestamp()
+    })
+    console.log('[Database] File tags updated:', fileId)
+  } catch (error) {
+    console.error('[Database] Error updating file tags:', error)
     throw error
   }
 }

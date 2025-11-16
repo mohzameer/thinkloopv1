@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Box, Flex, Text, ActionIcon, Stack, Paper, Group, Loader, TextInput, LoadingOverlay, Tooltip } from '@mantine/core'
-import { IconUser, IconChevronLeft, IconChevronRight, IconFileText, IconGitBranch, IconGitFork, IconSquare, IconCircle, IconPlus, IconTrash, IconCopy, IconHash } from '@tabler/icons-react'
+import { Box, Flex, Text, ActionIcon, Stack, Paper, Group, Loader, TextInput, LoadingOverlay, Tooltip, Button, Checkbox, CloseButton } from '@mantine/core'
+import { IconUser, IconChevronLeft, IconChevronRight, IconFileText, IconGitBranch, IconGitFork, IconSquare, IconCircle, IconPlus, IconTrash, IconCopy, IconHash, IconX } from '@tabler/icons-react'
 import { ReactFlow, Background, Controls, MiniMap, addEdge, useNodesState, useEdgesState, Handle, Position, type Connection, type Node, type Edge, type NodeTypes, type OnSelectionChangeParams } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { AuthDebugPanel } from './AuthDebugPanel'
@@ -9,13 +9,40 @@ import { useFiles } from '../hooks/useFiles'
 import { useHierarchy } from '../hooks/useHierarchy'
 import { useCanvas } from '../hooks/useCanvas'
 import type { Timestamp } from 'firebase/firestore'
+import type { Tag } from '../types/firebase'
 
 interface CanvasPageProps {
   userId: string
 }
 
+// Available colors for random assignment when creating new tags
+const availableColors = [
+  '#fa5252', // red
+  '#82c91e', // lime
+  '#e64980', // pink
+  '#7950f2', // violet
+  '#20c997', // green
+  '#ff6b6b', // coral
+  '#cc5de8', // grape
+  '#51cf66', // light green
+  '#ff8787', // light red
+  '#339af0', // light blue
+  '#ff922b', // light orange
+  '#69db7c', // mint
+  '#fd7e14', // orange
+  '#15aabf', // cyan
+  '#12b886', // teal
+]
+
+// Helper function to get color for a tag from the tags list
+const getTagColor = (tagName: string, tags: Tag[]): string => {
+  const tag = tags.find(t => t.name === tagName)
+  return tag?.color || '#868e96' // default gray if not found
+}
+
 // Custom Circle Node Component
-const CircleNode = ({ data, selected }: { data: { label: string; categories?: string[]; borderColor?: string }; selected?: boolean }) => {
+const CircleNode = ({ data, selected }: { data: { label: string; categories?: string[]; borderColor?: string; tags?: Tag[] }; selected?: boolean }) => {
+  const tags = data.tags || []
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
       <div
@@ -44,16 +71,16 @@ const CircleNode = ({ data, selected }: { data: { label: string; categories?: st
         {data.label}
       </div>
       {data.categories && data.categories.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           {data.categories.map((category, idx) => (
             <div
               key={idx}
               style={{
-                backgroundColor: '#228be6',
+                backgroundColor: getTagColor(category, tags),
                 color: 'white',
-                padding: '2px 6px',
-                borderRadius: '3px',
-                fontSize: '9px',
+                padding: '1px 4px',
+                borderRadius: '2px',
+                fontSize: '8px',
                 fontWeight: 500,
                 whiteSpace: 'nowrap'
               }}
@@ -68,7 +95,8 @@ const CircleNode = ({ data, selected }: { data: { label: string; categories?: st
 }
 
 // Custom Rectangle Node Component
-const RectangleNode = ({ data, selected }: { data: { label: string; categories?: string[]; borderColor?: string }; selected?: boolean }) => {
+const RectangleNode = ({ data, selected }: { data: { label: string; categories?: string[]; borderColor?: string; tags?: Tag[] }; selected?: boolean }) => {
+  const tags = data.tags || []
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
       <div
@@ -91,16 +119,16 @@ const RectangleNode = ({ data, selected }: { data: { label: string; categories?:
         {data.label}
       </div>
       {data.categories && data.categories.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           {data.categories.map((category, idx) => (
             <div
               key={idx}
               style={{
-                backgroundColor: '#12b886',
+                backgroundColor: getTagColor(category, tags),
                 color: 'white',
-                padding: '2px 6px',
-                borderRadius: '3px',
-                fontSize: '9px',
+                padding: '1px 4px',
+                borderRadius: '2px',
+                fontSize: '8px',
                 fontWeight: 500,
                 whiteSpace: 'nowrap'
               }}
@@ -120,14 +148,140 @@ const nodeTypes: NodeTypes = {
   rectangle: RectangleNode
 }
 
+// Tag Popup Component
+interface TagPopupProps {
+  isOpen: boolean
+  onClose: () => void
+  availableTags: Tag[]
+  selectedTags: string[]
+  onTagToggle: (tag: string) => void
+  onAddTag: (tagName: string, color: string) => void
+  onRemoveTag: (tagName: string) => void
+}
+
+const TagPopup = ({
+  isOpen,
+  onClose,
+  availableTags,
+  selectedTags,
+  onTagToggle,
+  onAddTag,
+  onRemoveTag
+}: TagPopupProps) => {
+  const [newTagInput, setNewTagInput] = useState('')
+
+  if (!isOpen) return null
+
+  const handleAddTag = () => {
+    const tagName = newTagInput.trim()
+    if (tagName && !availableTags.some(t => t.name === tagName)) {
+      // Pick a random color for the new tag
+      const randomColor = availableColors[Math.floor(Math.random() * availableColors.length)]
+      onAddTag(tagName, randomColor)
+      setNewTagInput('')
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        bottom: '80px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 1001,
+        pointerEvents: 'auto'
+      }}
+    >
+      <Paper
+        shadow="lg"
+        p="md"
+        style={{
+          width: '280px',
+          backgroundColor: 'white',
+          borderRadius: '8px',
+          maxHeight: '400px',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        {/* Header */}
+        <Flex justify="space-between" align="center" mb="sm">
+          <Text size="sm" fw={600}>Select Tags</Text>
+          <CloseButton size="sm" onClick={onClose} />
+        </Flex>
+
+        {/* Tag List with checkboxes */}
+        <Stack gap="xs" style={{ flex: 1, overflowY: 'auto', marginBottom: '12px' }}>
+          {availableTags.map((tag) => (
+            <Flex key={tag.name} align="center" justify="space-between" gap="xs">
+              <Flex align="center" gap="xs" style={{ flex: 1 }}>
+                <div
+                  style={{
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '2px',
+                    backgroundColor: tag.color,
+                    flexShrink: 0
+                  }}
+                />
+                <Checkbox
+                  label={tag.name}
+                  checked={selectedTags.includes(tag.name)}
+                  onChange={() => onTagToggle(tag.name)}
+                  size="sm"
+                  styles={{
+                    label: { fontSize: '13px' },
+                    root: { flex: 1 }
+                  }}
+                />
+              </Flex>
+              <ActionIcon
+                size="xs"
+                variant="subtle"
+                color="red"
+                onClick={() => onRemoveTag(tag.name)}
+                title="Remove tag from list"
+              >
+                <IconX size={12} />
+              </ActionIcon>
+            </Flex>
+          ))}
+        </Stack>
+
+        {/* Add new tag input */}
+        <Flex gap="xs">
+          <TextInput
+            placeholder="New tag..."
+            value={newTagInput}
+            onChange={(e) => setNewTagInput(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleAddTag()
+              }
+            }}
+            size="xs"
+            style={{ flex: 1 }}
+          />
+          <Button size="xs" onClick={handleAddTag}>
+            Add
+          </Button>
+        </Flex>
+      </Paper>
+    </div>
+  )
+}
+
 // Color Bar Component (needs to be inside ReactFlow context)
 interface ColorBarProps {
   selectedNodes: Node[]
   colors: { name: string; value: string }[]
   updateNodeColor: (color: string) => void
+  onTagClick: () => void
+  isTagPopupOpen: boolean
 }
 
-const FloatingColorBar = ({ selectedNodes, colors, updateNodeColor }: ColorBarProps) => {
+const FloatingColorBar = ({ selectedNodes, colors, updateNodeColor, onTagClick, isTagPopupOpen }: ColorBarProps) => {
   if (selectedNodes.length === 0) return null
 
   return (
@@ -185,11 +339,13 @@ const FloatingColorBar = ({ selectedNodes, colors, updateNodeColor }: ColorBarPr
           <ActionIcon
             size="lg"
             variant="filled"
-            onClick={() => console.log('Tag button clicked')}
+            onClick={onTagClick}
             title="Add Tags"
             style={{
-              backgroundColor: '#fef3c7',
-              color: '#92400e'
+              backgroundColor: isTagPopupOpen ? '#fde047' : '#fef3c7',
+              color: '#92400e',
+              transform: isTagPopupOpen ? 'scale(1.05)' : 'scale(1)',
+              transition: 'all 0.2s ease'
             }}
           >
             <IconHash size={20} />
@@ -223,7 +379,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
   // Firebase Hooks
   const { project, isLoading: projectLoading } = useProject(userId)
-  const { files, isLoading: filesLoading, createFile } = useFiles(project?.id || null, userId)
+  const { files, isLoading: filesLoading, createFile, updateTags: updateFileTagsLocal } = useFiles(project?.id || null, userId)
   const { mainItems, isLoading: hierarchyLoading, branchVariation, promoteToMain, deleteSubItem, deleteMainItem, renameMainItem, renameSubItem } = useHierarchy(selectedFileId)
   const {
     canvasState,
@@ -241,6 +397,37 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const [nodeIdCounter, setNodeIdCounter] = useState(1)
   const [selectedNodes, setSelectedNodes] = useState<Node[]>([])
 
+  // Tag System State
+  const [isTagPopupOpen, setIsTagPopupOpen] = useState(false)
+  const [selectedTagsForNodes, setSelectedTagsForNodes] = useState<string[]>([])
+
+  // Get tags from selected file
+  const selectedFile = files.find(f => f.id === selectedFileId)
+  const fileTags = selectedFile?.data.tags || []
+
+  // Initialize tags for files that don't have them
+  useEffect(() => {
+    const initializeTags = async () => {
+      if (selectedFileId && selectedFile && (!selectedFile.data.tags || selectedFile.data.tags.length === 0)) {
+        console.log('[CanvasPage] Initializing tags for file:', selectedFileId)
+        const defaultTags: Tag[] = [
+          { name: 'Idea', color: '#fab005' },      // yellow
+          { name: 'New', color: '#228be6' },       // blue
+          { name: 'Thinking', color: '#be4bdb' },  // purple
+        ]
+
+        try {
+          await updateFileTagsLocal(selectedFileId, defaultTags)
+          console.log('[CanvasPage] Tags initialized successfully')
+        } catch (error) {
+          console.error('[CanvasPage] Error initializing tags:', error)
+        }
+      }
+    }
+
+    initializeTags()
+  }, [selectedFileId, selectedFile, updateFileTagsLocal])
+
   // Define available colors
   const colors = [
     { name: 'Black', value: '#000000' },
@@ -257,6 +444,20 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const lastLoadedCanvasState = useRef<string | null>(null)
   // Track the current canvas key to prevent saving to wrong location
   const currentCanvasKey = useRef<string | null>(null)
+  // Track previous selection to detect changes
+  const previousSelectionRef = useRef<string>('')
+
+  // Close tag popup when selection changes
+  useEffect(() => {
+    const currentSelection = selectedNodes.map(n => n.id).sort().join(',')
+    if (previousSelectionRef.current !== currentSelection) {
+      if (isTagPopupOpen) {
+        setIsTagPopupOpen(false)
+        setSelectedTagsForNodes([])
+      }
+      previousSelectionRef.current = currentSelection
+    }
+  }, [selectedNodes, isTagPopupOpen])
 
   // Auto-select first file when files load (only if files exist)
   useEffect(() => {
@@ -408,6 +609,96 @@ function CanvasPage({ userId }: CanvasPageProps) {
       })
     )
   }, [selectedNodes, setNodes])
+
+  // Tag System Handlers
+  const handleTagClick = useCallback(() => {
+    setIsTagPopupOpen(!isTagPopupOpen)
+    // When opening, load current tags from first selected node
+    if (!isTagPopupOpen && selectedNodes.length > 0) {
+      const firstNode = selectedNodes[0]
+      const categories = (firstNode.data as any).categories || []
+      setSelectedTagsForNodes(Array.isArray(categories) ? categories : [])
+    }
+  }, [isTagPopupOpen, selectedNodes])
+
+  const handleTagToggle = useCallback((tag: string) => {
+    setSelectedTagsForNodes((prev) => {
+      const newTags = prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+
+      // Apply tags to nodes in real-time
+      if (selectedNodes.length > 0) {
+        setNodes((nds) =>
+          nds.map((node) => {
+            if (selectedNodes.some(selected => selected.id === node.id)) {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  categories: newTags,
+                  tags: fileTags
+                }
+              }
+            }
+            return node
+          })
+        )
+      }
+
+      return newTags
+    })
+  }, [selectedNodes, fileTags, setNodes])
+
+  const handleAddTag = useCallback(async (tagName: string, color: string) => {
+    if (!selectedFileId) return
+
+    const newTag: Tag = { name: tagName, color }
+    const updatedTags = [...fileTags, newTag]
+
+    try {
+      await updateFileTagsLocal(selectedFileId, updatedTags)
+    } catch (error) {
+      console.error('[CanvasPage] Error adding tag:', error)
+    }
+  }, [selectedFileId, fileTags, updateFileTagsLocal])
+
+  const handleRemoveTag = useCallback(async (tagName: string) => {
+    if (!selectedFileId) return
+
+    const updatedTags = fileTags.filter((t) => t.name !== tagName)
+    setSelectedTagsForNodes((prev) => prev.filter((t) => t !== tagName))
+
+    try {
+      await updateFileTagsLocal(selectedFileId, updatedTags)
+      // Also remove from all nodes
+      setNodes((nds) =>
+        nds.map((node) => ({
+          ...node,
+          data: {
+            ...node.data,
+            categories: ((node.data as any).categories || []).filter((c: string) => c !== tagName)
+          }
+        }))
+      )
+    } catch (error) {
+      console.error('[CanvasPage] Error removing tag:', error)
+    }
+  }, [selectedFileId, fileTags, updateFileTagsLocal, setNodes])
+
+
+  // Update all nodes with current file tags whenever tags or nodes change
+  useEffect(() => {
+    if (fileTags.length > 0) {
+      setNodes((nds) =>
+        nds.map((node) => ({
+          ...node,
+          data: {
+            ...node.data,
+            tags: fileTags
+          }
+        }))
+      )
+    }
+  }, [fileTags, setNodes])
 
   const formatDate = (timestamp: Timestamp) => {
     const date = timestamp.toDate()
@@ -630,8 +921,6 @@ function CanvasPage({ userId }: CanvasPageProps) {
     setEditingSubItemId(null)
     setEditingName('')
   }
-
-  const selectedFile = files.find(f => f.id === selectedFileId)
 
   // Show loading state
   if (projectLoading || filesLoading) {
@@ -895,10 +1184,24 @@ function CanvasPage({ userId }: CanvasPageProps) {
                 <Background />
                 <Controls />
                 <MiniMap />
+                <TagPopup
+                  isOpen={isTagPopupOpen}
+                  onClose={() => {
+                    setIsTagPopupOpen(false)
+                    setSelectedTagsForNodes([])
+                  }}
+                  availableTags={fileTags}
+                  selectedTags={selectedTagsForNodes}
+                  onTagToggle={handleTagToggle}
+                  onAddTag={handleAddTag}
+                  onRemoveTag={handleRemoveTag}
+                />
                 <FloatingColorBar
                   selectedNodes={selectedNodes}
                   colors={colors}
                   updateNodeColor={updateNodeColor}
+                  onTagClick={handleTagClick}
+                  isTagPopupOpen={isTagPopupOpen}
                 />
               </ReactFlow>
 

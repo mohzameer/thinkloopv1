@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getProjectFiles, createFile, updateFileName, deleteFile } from '../firebase/database'
-import type { FileDocument } from '../types/firebase'
+import { getProjectFiles, createFile, updateFileName, deleteFile, updateFileTags as updateFileTagsDb } from '../firebase/database'
+import type { FileDocument, Tag } from '../types/firebase'
 
 interface FileItem {
   id: string
@@ -117,6 +117,30 @@ export const useFiles = (projectId: string | null, userId: string | null) => {
     }
   }, [])
 
+  // Update file tags
+  const updateTags = useCallback(async (fileId: string, tags: Tag[]): Promise<boolean> => {
+    try {
+      console.log('[useFiles] Updating tags for file:', fileId)
+      await updateFileTagsDb(fileId, tags)
+      
+      // Update local state immediately
+      setState(prev => ({
+        ...prev,
+        files: prev.files.map(file =>
+          file.id === fileId
+            ? { ...file, data: { ...file.data, tags } }
+            : file
+        )
+      }))
+      
+      return true
+    } catch (error: any) {
+      console.error('[useFiles] Error updating tags:', error)
+      setState(prev => ({ ...prev, error: error.message || 'Failed to update tags' }))
+      return false
+    }
+  }, [])
+
   // Refresh files
   const refresh = useCallback(() => {
     loadFiles()
@@ -129,6 +153,7 @@ export const useFiles = (projectId: string | null, userId: string | null) => {
     createFile: createNewFile,
     renameFile,
     deleteFile: removeFile,
+    updateTags,
     refresh
   }
 }

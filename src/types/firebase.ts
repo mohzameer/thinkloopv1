@@ -17,11 +17,18 @@ export interface Project {
   updatedAt: Timestamp
 }
 
+// Tag type
+export interface Tag {
+  name: string
+  color: string
+}
+
 // File types
 export interface FileDocument {
   projectId: string
   userId: string
   name: string
+  tags: Tag[]
   createdAt: Timestamp
   updatedAt: Timestamp
 }
