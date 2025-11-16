@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Box, Flex, Text, ActionIcon, Stack, Paper, Group, Button, Loader, TextInput } from '@mantine/core'
-import { IconUser, IconChevronLeft, IconChevronRight, IconFileText, IconGitBranch, IconGitFork, IconSquare, IconCircle, IconPlus } from '@tabler/icons-react'
-import { ReactFlow, Background, Controls, MiniMap, addEdge, useNodesState, useEdgesState, Handle, Position, type Connection, type Node, type NodeTypes } from '@xyflow/react'
+import { Box, Flex, Text, ActionIcon, Stack, Paper, Group, Loader, TextInput, LoadingOverlay } from '@mantine/core'
+import { IconUser, IconChevronLeft, IconChevronRight, IconFileText, IconGitBranch, IconGitFork, IconSquare, IconCircle, IconPlus, IconTrash, IconCopy } from '@tabler/icons-react'
+import { ReactFlow, Background, Controls, MiniMap, addEdge, useNodesState, useEdgesState, Handle, Position, type Connection, type Node, type Edge, type NodeTypes } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { AuthDebugPanel } from './AuthDebugPanel'
 import { useProject } from '../hooks/useProject'
@@ -128,29 +128,40 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const [selectedMainItemId, setSelectedMainItemId] = useState<string | null>(null)
   const [selectedSubItemId, setSelectedSubItemId] = useState<string | null>(null)
 
+  // Editing State
+  const [editingMainItemId, setEditingMainItemId] = useState<string | null>(null)
+  const [editingSubItemId, setEditingSubItemId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+
+  // Operation Progress State
+  const [isOperationInProgress, setIsOperationInProgress] = useState(false)
+  const [operationMessage, setOperationMessage] = useState('')
+
   // Firebase Hooks
   const { project, isLoading: projectLoading } = useProject(userId)
   const { files, isLoading: filesLoading, createFile } = useFiles(project?.id || null, userId)
-  const { mainItems, isLoading: hierarchyLoading, branchVariation, promoteToMain } = useHierarchy(selectedFileId)
-  const { 
-    canvasState, 
-    isLoading: canvasLoading, 
+  const { mainItems, isLoading: hierarchyLoading, branchVariation, promoteToMain, deleteSubItem, renameMainItem, renameSubItem } = useHierarchy(selectedFileId)
+  const {
+    canvasState,
+    isLoading: canvasLoading,
     isSaving,
-    updateCanvas 
+    updateCanvas
   } = useCanvas(selectedFileId, selectedMainItemId, selectedSubItemId, {
     autoSave: true,
     autoSaveDelay: 1000 // milliseconds (1 second) - adjust as needed
   })
 
   // React Flow State
-  const [nodes, setNodes, onNodesChange] = useNodesState([])
-  const [edges, setEdges, onEdgesChange] = useEdgesState([])
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [nodeIdCounter, setNodeIdCounter] = useState(1)
-  
+
   // Track if we're currently loading canvas state to prevent auto-save during load
   const isLoadingCanvas = useRef(false)
   // Track the last canvas state we loaded to prevent reloading after saves
   const lastLoadedCanvasState = useRef<string | null>(null)
+  // Track the current canvas key to prevent saving to wrong location
+  const currentCanvasKey = useRef<string | null>(null)
 
   // Auto-select first file when files load (only if files exist)
   useEffect(() => {
@@ -170,30 +181,45 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
   // Load canvas state into React Flow (only on initial load or file/item change)
   useEffect(() => {
-    if (canvasState) {
-      // Create a unique key for this canvas state based on file/main/sub IDs
-      const canvasKey = `${selectedFileId}-${selectedMainItemId}-${selectedSubItemId}`
-      
-      // Only reload if this is a new canvas (different file/item) or first load
-      if (lastLoadedCanvasState.current !== canvasKey) {
-        console.log('[CanvasPage] Loading canvas state:', canvasState.nodes.length, 'nodes')
-        isLoadingCanvas.current = true
-        lastLoadedCanvasState.current = canvasKey
-        
-        setNodes(canvasState.nodes)
-        setEdges(canvasState.edges)
-        
-        // Set node counter to max ID + 1
-        if (canvasState.nodes.length > 0) {
-          const maxId = Math.max(...canvasState.nodes.map(n => parseInt(n.id) || 0))
-          setNodeIdCounter(maxId + 1)
-        }
-        
-        // Allow saves after a short delay
-        setTimeout(() => {
-          isLoadingCanvas.current = false
-        }, 100)
+    if (!canvasState || !selectedFileId || !selectedMainItemId || !selectedSubItemId) {
+      return
+    }
+
+    // Create a unique key for this canvas state based on file/main/sub IDs
+    const expectedCanvasKey = `${selectedFileId}-${selectedMainItemId}-${selectedSubItemId}`
+
+    // CRITICAL: Verify canvasState matches the currently selected IDs
+    const canvasStateKey = (canvasState as any)._canvasKey
+    if (canvasStateKey !== expectedCanvasKey) {
+      console.log('[CanvasPage] Ignoring stale canvasState', {
+        canvasStateKey,
+        expectedCanvasKey,
+        nodes: canvasState.nodes.length
+      })
+      return
+    }
+
+    // Only reload if this is a new canvas (different file/item) or first load
+    if (lastLoadedCanvasState.current !== expectedCanvasKey) {
+      console.log('[CanvasPage] Loading canvas state for key:', expectedCanvasKey, 'with', canvasState.nodes.length, 'nodes,', canvasState.edges.length, 'edges')
+      isLoadingCanvas.current = true
+      lastLoadedCanvasState.current = expectedCanvasKey
+      currentCanvasKey.current = expectedCanvasKey
+
+      setNodes(canvasState.nodes)
+      setEdges(canvasState.edges)
+
+      // Set node counter to max ID + 1
+      if (canvasState.nodes.length > 0) {
+        const maxId = Math.max(...canvasState.nodes.map(n => parseInt(n.id) || 0))
+        setNodeIdCounter(maxId + 1)
       }
+
+      // Allow saves after a longer delay to ensure state has propagated
+      setTimeout(() => {
+        isLoadingCanvas.current = false
+        console.log('[CanvasPage] Canvas loading complete, saves now enabled for:', expectedCanvasKey)
+      }, 300)
     }
   }, [canvasState, selectedFileId, selectedMainItemId, selectedSubItemId, setNodes, setEdges])
 
@@ -201,23 +227,45 @@ function CanvasPage({ userId }: CanvasPageProps) {
   useEffect(() => {
     // Skip if currently loading canvas state
     if (isLoadingCanvas.current) {
+      console.log('[CanvasPage] Skipping save: currently loading canvas')
       return
     }
 
     // Skip if no file/item selected
     if (!selectedFileId || !selectedMainItemId || !selectedSubItemId) {
+      console.log('[CanvasPage] Skipping save: no file/item selected')
+      return
+    }
+
+    // Verify we're saving to the correct canvas
+    const expectedCanvasKey = `${selectedFileId}-${selectedMainItemId}-${selectedSubItemId}`
+    if (currentCanvasKey.current !== expectedCanvasKey) {
+      console.log('[CanvasPage] Skipping save: canvas key mismatch', {
+        current: currentCanvasKey.current,
+        expected: expectedCanvasKey
+      })
+      return
+    }
+
+    // Verify that the loaded canvas state matches what we're about to save
+    if (lastLoadedCanvasState.current !== expectedCanvasKey) {
+      console.log('[CanvasPage] Skipping save: canvas not yet loaded for this key', {
+        lastLoaded: lastLoadedCanvasState.current,
+        expected: expectedCanvasKey
+      })
       return
     }
 
     // Skip if no nodes (empty canvas on first load)
     if (nodes.length === 0 && edges.length === 0) {
+      console.log('[CanvasPage] Skipping save: empty canvas')
       return
     }
 
-    console.log('[CanvasPage] Canvas changed, scheduling auto-save')
+    console.log('[CanvasPage] Canvas changed, scheduling auto-save for:', expectedCanvasKey, 'with', nodes.length, 'nodes,', edges.length, 'edges')
     updateCanvas({
-      nodes,
-      edges,
+      nodes: nodes as any,
+      edges: edges as any,
       viewport: { x: 0, y: 0, zoom: 1 }
     })
   }, [nodes, edges, selectedFileId, selectedMainItemId, selectedSubItemId, updateCanvas])
@@ -245,7 +293,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
     const date = timestamp.toDate()
     const now = new Date()
     const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
-    
+
     if (diffInHours < 24) {
       return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
     } else if (diffInHours < 48) {
@@ -262,29 +310,163 @@ function CanvasPage({ userId }: CanvasPageProps) {
   }
 
   const handleSubItemSelect = (mainItemId: string, subItemId: string) => {
+    console.log('[CanvasPage] Selecting sub-item:', { mainItemId, subItemId })
+    // Immediately mark as loading to prevent saves during transition
+    isLoadingCanvas.current = true
+    // Clear the current canvas key to prevent saves to old location
+    currentCanvasKey.current = null
     setSelectedMainItemId(mainItemId)
     setSelectedSubItemId(subItemId)
   }
 
-  const handleBranchSubItem = async (mainItemId: string, subItemId: string) => {
-    const count = mainItems.find(m => m.id === mainItemId)?.subItems.length || 0
-    const newSubItemId = await branchVariation(mainItemId, subItemId, `Var ${count + 1}`)
-    if (newSubItemId) {
-      setSelectedMainItemId(mainItemId)
-      setSelectedSubItemId(newSubItemId)
+  const handleDuplicateSubItem = async (mainItemId: string, subItemId: string) => {
+    console.log('[CanvasPage] Duplicating sub-item:', { mainItemId, sourceSubItemId: subItemId })
+
+    // Show progress indicator
+    setIsOperationInProgress(true)
+    setOperationMessage('Duplicating variation...')
+
+    // Immediately mark as loading to prevent saves during duplication
+    isLoadingCanvas.current = true
+    // Clear the current canvas key to prevent saves to old location
+    currentCanvasKey.current = null
+
+    try {
+      const count = mainItems.find(m => m.id === mainItemId)?.subItems.length || 0
+      const newSubItemId = await branchVariation(mainItemId, subItemId, `v${count + 1}`)
+      console.log('[CanvasPage] Duplicate created, new sub-item:', newSubItemId)
+      if (newSubItemId) {
+        setSelectedMainItemId(mainItemId)
+        setSelectedSubItemId(newSubItemId)
+      }
+    } finally {
+      // Hide progress indicator
+      setIsOperationInProgress(false)
+      setOperationMessage('')
     }
   }
 
-  const handlePromoteSubItem = async (mainItemId: string, subItemId: string) => {
-    const subItemName = mainItems
-      .find(m => m.id === mainItemId)
-      ?.subItems.find(s => s.id === subItemId)?.data.name || 'Var'
-    
-    const result = await promoteToMain(mainItemId, subItemId, `Main-${subItemName}`)
-    if (result) {
-      setSelectedMainItemId(result.mainItemId)
-      setSelectedSubItemId(result.subItemId)
+  const handleBranchSubItem = async (mainItemId: string, subItemId: string) => {
+    console.log('[CanvasPage] Branching sub-item to new main item:', { mainItemId, subItemId })
+
+    // Show progress indicator
+    setIsOperationInProgress(true)
+    setOperationMessage('Branching to new main item...')
+
+    // Immediately mark as loading to prevent saves during branching
+    isLoadingCanvas.current = true
+    // Clear the current canvas key to prevent saves to old location
+    currentCanvasKey.current = null
+
+    try {
+      // Get count of main items to name the new one
+      const count = mainItems.length
+      const newMainItemName = `Main ${count + 1}`
+
+      const result = await promoteToMain(mainItemId, subItemId, newMainItemName)
+      if (result) {
+        console.log('[CanvasPage] Branch created as new main item:', result.mainItemId)
+        setSelectedMainItemId(result.mainItemId)
+        setSelectedSubItemId(result.subItemId)
+      }
+    } finally {
+      // Hide progress indicator
+      setIsOperationInProgress(false)
+      setOperationMessage('')
     }
+  }
+
+  const handleDeleteSubItem = async (mainItemId: string, subItemId: string) => {
+    const mainItem = mainItems.find(m => m.id === mainItemId)
+    if (!mainItem) return
+
+    const subItem = mainItem.subItems.find(s => s.id === subItemId)
+    if (!subItem) return
+
+    // Prevent deleting the default sub-item if it's the only one
+    if (subItem.data.isDefault && mainItem.subItems.length === 1) {
+      alert("Cannot delete the last variation")
+      return
+    }
+
+    // Confirm deletion
+    if (!confirm(`Delete "${subItem.data.name}"?`)) {
+      return
+    }
+
+    console.log('[CanvasPage] Deleting sub-item:', { mainItemId, subItemId })
+
+    // If currently selected, switch to another sub-item before deleting
+    if (selectedMainItemId === mainItemId && selectedSubItemId === subItemId) {
+      // Find another sub-item to select (prefer default, or first available)
+      const otherSubItem = mainItem.subItems.find(s => s.id !== subItemId && s.data.isDefault)
+        || mainItem.subItems.find(s => s.id !== subItemId)
+
+      if (otherSubItem) {
+        console.log('[CanvasPage] Switching to sub-item before deletion:', otherSubItem.id)
+        // Immediately mark as loading to prevent saves during transition
+        isLoadingCanvas.current = true
+        currentCanvasKey.current = null
+        setSelectedMainItemId(mainItemId)
+        setSelectedSubItemId(otherSubItem.id)
+      }
+    }
+
+    // Delete the sub-item
+    const success = await deleteSubItem(mainItemId, subItemId)
+    if (success) {
+      console.log('[CanvasPage] Sub-item deleted successfully')
+    }
+  }
+
+  // Rename handlers
+  const handleMainItemDoubleClick = (mainItemId: string, currentName: string) => {
+    console.log('[CanvasPage] Starting edit for main item:', mainItemId)
+    setEditingMainItemId(mainItemId)
+    setEditingName(currentName)
+  }
+
+  const handleSubItemDoubleClick = (mainItemId: string, subItemId: string, currentName: string) => {
+    console.log('[CanvasPage] Starting edit for sub-item:', subItemId)
+    setEditingMainItemId(mainItemId)
+    setEditingSubItemId(subItemId)
+    setEditingName(currentName)
+  }
+
+  const handleSaveMainItemName = async (mainItemId: string) => {
+    if (!editingName.trim()) {
+      setEditingMainItemId(null)
+      return
+    }
+
+    console.log('[CanvasPage] Saving main item name:', editingName)
+    const success = await renameMainItem(mainItemId, editingName.trim())
+    if (success) {
+      setEditingMainItemId(null)
+      setEditingName('')
+    }
+  }
+
+  const handleSaveSubItemName = async (mainItemId: string, subItemId: string) => {
+    if (!editingName.trim()) {
+      setEditingMainItemId(null)
+      setEditingSubItemId(null)
+      return
+    }
+
+    console.log('[CanvasPage] Saving sub-item name:', editingName)
+    const success = await renameSubItem(mainItemId, subItemId, editingName.trim())
+    if (success) {
+      setEditingMainItemId(null)
+      setEditingSubItemId(null)
+      setEditingName('')
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditingMainItemId(null)
+    setEditingSubItemId(null)
+    setEditingName('')
   }
 
   const selectedFile = files.find(f => f.id === selectedFileId)
@@ -401,7 +583,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
                   <IconPlus size={16} />
                 </ActionIcon>
               </Flex>
-              
+
               {filesLoading ? (
                 <Flex justify="center" py="xl">
                   <Loader size="sm" />
@@ -601,15 +783,31 @@ function CanvasPage({ userId }: CanvasPageProps) {
             transition: 'width 0.3s ease',
             overflow: 'hidden',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            position: 'relative'
           }}
         >
+          {/* Loading Overlay for Operations - Scoped to Sidebar */}
+          <LoadingOverlay
+            visible={isOperationInProgress}
+            overlayProps={{ blur: 2 }}
+            loaderProps={{
+              children: (
+                <Stack align="center" gap="md">
+                  <Loader size="md" />
+                  <Text size="xs" fw={500}>
+                    {operationMessage}
+                  </Text>
+                </Stack>
+              )
+            }}
+          />
           {!rightSidebarCollapsed && (
             <Box style={{ padding: '16px', overflow: 'auto', flex: 1 }}>
               <Text size="sm" fw={600} mb="md" style={{ color: '#666' }}>
-                Hierarchy
+                Versions
               </Text>
-              
+
               {!selectedFileId ? (
                 <Text size="sm" c="dimmed" ta="center" py="xl">
                   Select a file to view hierarchy
@@ -636,21 +834,51 @@ function CanvasPage({ userId }: CanvasPageProps) {
                           backgroundColor: 'white',
                           marginBottom: mainItem.subItems && mainItem.subItems.length > 0 ? '4px' : '0'
                         }}
+                        onDoubleClick={() => handleMainItemDoubleClick(mainItem.id, mainItem.data.name)}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#f8f9fa'
-                          e.currentTarget.style.borderColor = '#dee2e6'
+                          if (editingMainItemId !== mainItem.id) {
+                            e.currentTarget.style.backgroundColor = '#f8f9fa'
+                            e.currentTarget.style.borderColor = '#dee2e6'
+                          }
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = 'white'
-                          e.currentTarget.style.borderColor = '#e9ecef'
+                          if (editingMainItemId !== mainItem.id) {
+                            e.currentTarget.style.backgroundColor = 'white'
+                            e.currentTarget.style.borderColor = '#e9ecef'
+                          }
                         }}
                       >
                         <Group gap="xs" wrap="nowrap" style={{ justifyContent: 'space-between' }}>
-                          <Group gap="xs" wrap="nowrap">
+                          <Group gap="xs" wrap="nowrap" style={{ flex: 1 }}>
                             <IconGitBranch size={16} style={{ color: '#868e96', flexShrink: 0 }} />
-                            <Text size="sm" fw={500}>
-                              {mainItem.data.name}
-                            </Text>
+                            {editingMainItemId === mainItem.id && !editingSubItemId ? (
+                              <TextInput
+                                value={editingName}
+                                onChange={(e) => setEditingName(e.currentTarget.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleSaveMainItemName(mainItem.id)
+                                  } else if (e.key === 'Escape') {
+                                    handleCancelEdit()
+                                  }
+                                }}
+                                onBlur={() => handleSaveMainItemName(mainItem.id)}
+                                size="xs"
+                                autoFocus
+                                style={{ flex: 1 }}
+                                styles={{
+                                  input: {
+                                    fontSize: '14px',
+                                    fontWeight: 500,
+                                    padding: '2px 6px'
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <Text size="sm" fw={500}>
+                                {mainItem.data.name}
+                              </Text>
+                            )}
                           </Group>
                         </Group>
                       </Paper>
@@ -679,9 +907,9 @@ function CanvasPage({ userId }: CanvasPageProps) {
                                   cursor: 'pointer',
                                   border: '1px solid #e9ecef',
                                   transition: 'all 0.2s ease',
-                                  backgroundColor: 
-                                    selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id 
-                                      ? '#e7f5ff' 
+                                  backgroundColor:
+                                    selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id
+                                      ? '#e7f5ff'
                                       : 'white',
                                   borderColor:
                                     selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id
@@ -689,40 +917,99 @@ function CanvasPage({ userId }: CanvasPageProps) {
                                       : '#e9ecef'
                                 }}
                                 onClick={() => handleSubItemSelect(mainItem.id, subItem.id)}
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation()
+                                  handleSubItemDoubleClick(mainItem.id, subItem.id, subItem.data.name)
+                                }}
                                 onMouseEnter={(e) => {
-                                  if (!(selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id)) {
+                                  if (!(selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id) &&
+                                    !(editingMainItemId === mainItem.id && editingSubItemId === subItem.id)) {
                                     e.currentTarget.style.backgroundColor = '#f8f9fa'
                                     e.currentTarget.style.borderColor = '#dee2e6'
                                   }
                                 }}
                                 onMouseLeave={(e) => {
-                                  if (!(selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id)) {
+                                  if (!(selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id) &&
+                                    !(editingMainItemId === mainItem.id && editingSubItemId === subItem.id)) {
                                     e.currentTarget.style.backgroundColor = 'white'
                                     e.currentTarget.style.borderColor = '#e9ecef'
                                   }
                                 }}
                               >
                                 <Group gap="xs" wrap="nowrap" style={{ justifyContent: 'space-between' }}>
-                                  <Text size="sm" c="dimmed" style={{ flex: 1 }}>
-                                    {subItem.data.name}
-                                    {subItem.data.isDefault && (
-                                      <Text component="span" size="xs" c="blue" ml={4}>
-                                        (default)
-                                      </Text>
-                                    )}
-                                  </Text>
-                                  <ActionIcon
-                                    size="xs"
-                                    variant="subtle"
-                                    color="gray"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleBranchSubItem(mainItem.id, subItem.id)
-                                    }}
-                                    title="Branch variation"
-                                  >
-                                    <IconGitFork size={14} />
-                                  </ActionIcon>
+                                  {editingMainItemId === mainItem.id && editingSubItemId === subItem.id ? (
+                                    <TextInput
+                                      value={editingName}
+                                      onChange={(e) => setEditingName(e.currentTarget.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          handleSaveSubItemName(mainItem.id, subItem.id)
+                                        } else if (e.key === 'Escape') {
+                                          handleCancelEdit()
+                                        }
+                                        e.stopPropagation()
+                                      }}
+                                      onBlur={() => handleSaveSubItemName(mainItem.id, subItem.id)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      size="xs"
+                                      autoFocus
+                                      style={{ flex: 1 }}
+                                      styles={{
+                                        input: {
+                                          fontSize: '14px',
+                                          padding: '2px 6px',
+                                          color: '#666'
+                                        }
+                                      }}
+                                    />
+                                  ) : (
+                                    <Text size="sm" c="dimmed" style={{ flex: 1 }}>
+                                      {subItem.data.name}
+                                      {subItem.data.isDefault && (
+                                        <Text component="span" size="xs" c="blue" ml={4}>
+                                          (default)
+                                        </Text>
+                                      )}
+                                    </Text>
+                                  )}
+                                  <Group gap={4} wrap="nowrap">
+                                    <ActionIcon
+                                      size="xs"
+                                      variant="subtle"
+                                      color="blue"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleDuplicateSubItem(mainItem.id, subItem.id)
+                                      }}
+                                      title="Duplicate variation (create copy in same branch)"
+                                    >
+                                      <IconCopy size={14} />
+                                    </ActionIcon>
+                                    <ActionIcon
+                                      size="xs"
+                                      variant="subtle"
+                                      color="gray"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleBranchSubItem(mainItem.id, subItem.id)
+                                      }}
+                                      title="Branch off as new main branch"
+                                    >
+                                      <IconGitFork size={14} />
+                                    </ActionIcon>
+                                    <ActionIcon
+                                      size="xs"
+                                      variant="subtle"
+                                      color="red"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleDeleteSubItem(mainItem.id, subItem.id)
+                                      }}
+                                      title="Delete variation"
+                                    >
+                                      <IconTrash size={14} />
+                                    </ActionIcon>
+                                  </Group>
                                 </Group>
                               </Paper>
                             </Box>

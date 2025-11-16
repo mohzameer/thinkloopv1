@@ -304,7 +304,7 @@ export const createMainItemWithDefaultSubItem = async (
     }
 
     await setDoc(subItemRef, {
-      name: 'Var 1',
+      name: 'v1',
       order: 0,
       isDefault: true,
       reactFlowState: defaultState,
