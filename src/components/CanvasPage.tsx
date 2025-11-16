@@ -1,364 +1,26 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Box, Flex, Text, ActionIcon, Stack, Paper, Group, Loader, TextInput, LoadingOverlay, Tooltip, Button, Checkbox, CloseButton } from '@mantine/core'
-import { IconUser, IconChevronLeft, IconChevronRight, IconFileText, IconGitBranch, IconGitFork, IconSquare, IconCircle, IconPlus, IconTrash, IconCopy, IconHash, IconX } from '@tabler/icons-react'
-import { ReactFlow, Background, Controls, MiniMap, addEdge, useNodesState, useEdgesState, Handle, Position, type Connection, type Node, type Edge, type NodeTypes, type OnSelectionChangeParams } from '@xyflow/react'
+import { Box, Flex, ActionIcon, Stack, Loader, Text } from '@mantine/core'
+import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react'
+import { addEdge, useNodesState, useEdgesState, type Connection, type Node, type Edge, type OnSelectionChangeParams } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { AuthDebugPanel } from './AuthDebugPanel'
 import { useProject } from '../hooks/useProject'
 import { useFiles } from '../hooks/useFiles'
 import { useHierarchy } from '../hooks/useHierarchy'
 import { useCanvas } from '../hooks/useCanvas'
-import type { Timestamp } from 'firebase/firestore'
 import type { Tag } from '../types/firebase'
+import { Header } from './canvas/Header'
+import { FilesSidebar } from './canvas/FilesSidebar'
+import { HierarchySidebar } from './canvas/HierarchySidebar'
+import { CanvasArea } from './canvas/CanvasArea'
 
 interface CanvasPageProps {
   userId: string
 }
 
-// Available colors for random assignment when creating new tags
-const availableColors = [
-  '#fa5252', // red
-  '#82c91e', // lime
-  '#e64980', // pink
-  '#7950f2', // violet
-  '#20c997', // green
-  '#ff6b6b', // coral
-  '#cc5de8', // grape
-  '#51cf66', // light green
-  '#ff8787', // light red
-  '#339af0', // light blue
-  '#ff922b', // light orange
-  '#69db7c', // mint
-  '#fd7e14', // orange
-  '#15aabf', // cyan
-  '#12b886', // teal
-]
-
-// Helper function to get color for a tag from the tags list
-const getTagColor = (tagName: string, tags: Tag[]): string => {
-  const tag = tags.find(t => t.name === tagName)
-  return tag?.color || '#868e96' // default gray if not found
-}
-
-// Custom Circle Node Component
-const CircleNode = ({ data, selected }: { data: { label: string; categories?: string[]; borderColor?: string; tags?: Tag[] }; selected?: boolean }) => {
-  const tags = data.tags || []
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <div
-        style={{
-          width: '100px',
-          height: '100px',
-          borderRadius: '50%',
-          border: `2px solid ${data.borderColor || '#1a192b'}`,
-          backgroundColor: 'white',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '12px',
-          fontWeight: 500,
-          textAlign: 'center',
-          padding: '8px',
-          position: 'relative',
-          boxShadow: selected ? '0 0 0 3px rgba(220, 38, 38, 0.3)' : 'none',
-          transition: 'all 0.1s ease'
-        }}
-      >
-        <Handle type="target" position={Position.Top} />
-        <Handle type="source" position={Position.Bottom} />
-        <Handle type="target" position={Position.Left} />
-        <Handle type="source" position={Position.Right} />
-        {data.label}
-      </div>
-      {data.categories && data.categories.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          {data.categories.map((category, idx) => (
-            <div
-              key={idx}
-              style={{
-                backgroundColor: getTagColor(category, tags),
-                color: 'white',
-                padding: '1px 4px',
-                borderRadius: '2px',
-                fontSize: '8px',
-                fontWeight: 500,
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {category}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Custom Rectangle Node Component
-const RectangleNode = ({ data, selected }: { data: { label: string; categories?: string[]; borderColor?: string; tags?: Tag[] }; selected?: boolean }) => {
-  const tags = data.tags || []
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <div
-        style={{
-          padding: '10px 20px',
-          borderRadius: '3px',
-          border: `2px solid ${data.borderColor || '#1a192b'}`,
-          backgroundColor: 'white',
-          fontSize: '12px',
-          fontWeight: 500,
-          position: 'relative',
-          boxShadow: selected ? '0 0 0 3px rgba(220, 38, 38, 0.3)' : 'none',
-          transition: 'all 0.1s ease'
-        }}
-      >
-        <Handle type="target" position={Position.Top} />
-        <Handle type="source" position={Position.Bottom} />
-        <Handle type="target" position={Position.Left} />
-        <Handle type="source" position={Position.Right} />
-        {data.label}
-      </div>
-      {data.categories && data.categories.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          {data.categories.map((category, idx) => (
-            <div
-              key={idx}
-              style={{
-                backgroundColor: getTagColor(category, tags),
-                color: 'white',
-                padding: '1px 4px',
-                borderRadius: '2px',
-                fontSize: '8px',
-                fontWeight: 500,
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {category}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Define node types
-const nodeTypes: NodeTypes = {
-  circle: CircleNode,
-  rectangle: RectangleNode
-}
-
-// Tag Popup Component
-interface TagPopupProps {
-  isOpen: boolean
-  onClose: () => void
-  availableTags: Tag[]
-  selectedTags: string[]
-  onTagToggle: (tag: string) => void
-  onAddTag: (tagName: string, color: string) => void
-  onRemoveTag: (tagName: string) => void
-}
-
-const TagPopup = ({
-  isOpen,
-  onClose,
-  availableTags,
-  selectedTags,
-  onTagToggle,
-  onAddTag,
-  onRemoveTag
-}: TagPopupProps) => {
-  const [newTagInput, setNewTagInput] = useState('')
-
-  if (!isOpen) return null
-
-  const handleAddTag = () => {
-    const tagName = newTagInput.trim()
-    if (tagName && !availableTags.some(t => t.name === tagName)) {
-      // Pick a random color for the new tag
-      const randomColor = availableColors[Math.floor(Math.random() * availableColors.length)]
-      onAddTag(tagName, randomColor)
-      setNewTagInput('')
-    }
-  }
-
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        bottom: '80px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 1001,
-        pointerEvents: 'auto'
-      }}
-    >
-      <Paper
-        shadow="lg"
-        p="md"
-        style={{
-          width: '280px',
-          backgroundColor: 'white',
-          borderRadius: '8px',
-          maxHeight: '400px',
-          display: 'flex',
-          flexDirection: 'column'
-        }}
-      >
-        {/* Header */}
-        <Flex justify="space-between" align="center" mb="sm">
-          <Text size="sm" fw={600}>Select Tags</Text>
-          <CloseButton size="sm" onClick={onClose} />
-        </Flex>
-
-        {/* Tag List with checkboxes */}
-        <Stack gap="xs" style={{ flex: 1, overflowY: 'auto', marginBottom: '12px' }}>
-          {availableTags.map((tag) => (
-            <Flex key={tag.name} align="center" justify="space-between" gap="xs">
-              <Flex align="center" gap="xs" style={{ flex: 1 }}>
-                <div
-                  style={{
-                    width: '12px',
-                    height: '12px',
-                    borderRadius: '2px',
-                    backgroundColor: tag.color,
-                    flexShrink: 0
-                  }}
-                />
-                <Checkbox
-                  label={tag.name}
-                  checked={selectedTags.includes(tag.name)}
-                  onChange={() => onTagToggle(tag.name)}
-                  size="sm"
-                  styles={{
-                    label: { fontSize: '13px' },
-                    root: { flex: 1 }
-                  }}
-                />
-              </Flex>
-              <ActionIcon
-                size="xs"
-                variant="subtle"
-                color="red"
-                onClick={() => onRemoveTag(tag.name)}
-                title="Remove tag from list"
-              >
-                <IconX size={12} />
-              </ActionIcon>
-            </Flex>
-          ))}
-        </Stack>
-
-        {/* Add new tag input */}
-        <Flex gap="xs">
-          <TextInput
-            placeholder="New tag..."
-            value={newTagInput}
-            onChange={(e) => setNewTagInput(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                handleAddTag()
-              }
-            }}
-            size="xs"
-            style={{ flex: 1 }}
-          />
-          <Button size="xs" onClick={handleAddTag}>
-            Add
-          </Button>
-        </Flex>
-      </Paper>
-    </div>
-  )
-}
-
-// Color Bar Component (needs to be inside ReactFlow context)
-interface ColorBarProps {
-  selectedNodes: Node[]
-  colors: { name: string; value: string }[]
-  updateNodeColor: (color: string) => void
-  onTagClick: () => void
-  isTagPopupOpen: boolean
-}
-
-const FloatingColorBar = ({ selectedNodes, colors, updateNodeColor, onTagClick, isTagPopupOpen }: ColorBarProps) => {
-  if (selectedNodes.length === 0) return null
-
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        bottom: '20px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 1000,
-        pointerEvents: 'auto'
-      }}
-    >
-      <Paper
-        shadow="md"
-        p="sm"
-        style={{
-          display: 'flex',
-          gap: '8px',
-          alignItems: 'center',
-          backgroundColor: 'white',
-          borderRadius: '8px'
-        }}
-      >
-        {colors.map((color) => (
-          <Tooltip key={color.value} label={color.name} position="top" withArrow>
-            <ActionIcon
-              size="lg"
-              variant="light"
-              onClick={() => updateNodeColor(color.value)}
-              style={{
-                backgroundColor: 'white',
-                border: `2px solid ${color.value}`,
-                borderRadius: '4px'
-              }}
-              title={color.name}
-            >
-              <div
-                style={{
-                  width: '20px',
-                  height: '20px',
-                  backgroundColor: color.value,
-                  borderRadius: '2px'
-                }}
-              />
-            </ActionIcon>
-          </Tooltip>
-        ))}
-
-        {/* Divider with spacing */}
-        <div style={{ width: '1px', height: '24px', backgroundColor: '#e9ecef', marginLeft: '4px' }} />
-
-        {/* Tag button */}
-        <Tooltip label="Add Tags" position="top" withArrow>
-          <ActionIcon
-            size="lg"
-            variant="filled"
-            onClick={onTagClick}
-            title="Add Tags"
-            style={{
-              backgroundColor: isTagPopupOpen ? '#fde047' : '#fef3c7',
-              color: '#92400e',
-              transform: isTagPopupOpen ? 'scale(1.05)' : 'scale(1)',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <IconHash size={20} />
-          </ActionIcon>
-        </Tooltip>
-      </Paper>
-    </div>
-  )
-}
-
 function CanvasPage({ userId }: CanvasPageProps) {
   // UI State
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
   const sidebarWidth = sidebarCollapsed ? 0 : 280
   const rightSidebarWidth = rightSidebarCollapsed ? 0 : 300
@@ -373,6 +35,12 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const [editingMainItemId, setEditingMainItemId] = useState<string | null>(null)
   const [editingSubItemId, setEditingSubItemId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
+
+  // Node Editing State
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
+
+  // Edge Editing State
+  const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null)
 
   // Operation Progress State
   const [isOperationInProgress, setIsOperationInProgress] = useState(false)
@@ -712,7 +380,53 @@ function CanvasPage({ userId }: CanvasPageProps) {
   }, [selectedFileId, fileTags, updateFileTagsLocal, setNodes])
 
 
-  // Update all nodes with current file tags whenever tags or nodes change
+  // Node editing handlers
+  const handleNodeLabelChange = useCallback((nodeId: string, newLabel: string) => {
+    // Update the node in real-time
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === nodeId) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              label: newLabel
+            }
+          }
+        }
+        return node
+      })
+    )
+  }, [setNodes])
+
+  const handleNodeEditingComplete = useCallback(() => {
+    setEditingNodeId(null)
+  }, [])
+
+  // Edge editing handlers
+  const handleEdgeLabelChange = useCallback((edgeId: string, newLabel: string) => {
+    // Update the edge in real-time
+    setEdges((eds) =>
+      eds.map((edge) => {
+        if (edge.id === edgeId) {
+          return {
+            ...edge,
+            data: {
+              ...edge.data,
+              label: newLabel
+            }
+          }
+        }
+        return edge
+      })
+    )
+  }, [setEdges])
+
+  const handleEdgeEditingComplete = useCallback(() => {
+    setEditingEdgeId(null)
+  }, [])
+
+  // Update all nodes with current file tags whenever tags change
   useEffect(() => {
     if (fileTags.length > 0) {
       setNodes((nds) =>
@@ -725,21 +439,38 @@ function CanvasPage({ userId }: CanvasPageProps) {
         }))
       )
     }
-  }, [fileTags, setNodes])
+  }, [fileTags])
 
-  const formatDate = (timestamp: Timestamp) => {
-    const date = timestamp.toDate()
-    const now = new Date()
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+  // Update nodes with editing state and handlers
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          isEditing: editingNodeId === node.id,
+          onLabelChange: (value: string) => handleNodeLabelChange(node.id, value),
+          onEditingComplete: handleNodeEditingComplete
+        }
+      }))
+    )
+  }, [editingNodeId, handleNodeLabelChange, handleNodeEditingComplete])
 
-    if (diffInHours < 24) {
-      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-    } else if (diffInHours < 48) {
-      return 'Yesterday'
-    } else {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    }
-  }
+  // Update edges with editing state and handlers
+  useEffect(() => {
+    setEdges((eds) =>
+      eds.map((edge) => ({
+        ...edge,
+        data: {
+          ...edge.data,
+          isEditing: editingEdgeId === edge.id,
+          onLabelChange: (value: string) => handleEdgeLabelChange(edge.id, value),
+          onEditingComplete: handleEdgeEditingComplete
+        }
+      }))
+    )
+  }, [editingEdgeId, handleEdgeLabelChange, handleEdgeEditingComplete])
+
 
   const handleFileSelect = (fileId: string) => {
     console.log('[CanvasPage] Selecting file:', fileId, '(clearing main/sub item selection)')
@@ -1070,60 +801,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
       }}
     >
       {/* Header Bar */}
-      <Flex
-        style={{
-          height: '60px',
-          backgroundColor: 'white',
-          borderBottom: '1px solid #e0e0e0',
-          padding: '0 24px',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          zIndex: 10
-        }}
-      >
-        {/* Left: App Name */}
-        <Text
-          size="xl"
-          fw={700}
-          style={{
-            flex: '0 0 auto',
-            fontSize: '20px',
-            color: '#1a1a1a'
-          }}
-        >
-          ThinkPost
-        </Text>
-
-        {/* Middle: Post Title */}
-        <Flex align="center" gap="sm" style={{ flex: '1 1 auto', justifyContent: 'center' }}>
-          <Text
-            size="lg"
-            fw={500}
-            style={{
-              textAlign: 'center',
-              color: selectedFile ? '#666' : '#adb5bd',
-              fontSize: '16px'
-            }}
-          >
-            {selectedFile?.data.name || 'No File Selected'}
-          </Text>
-          {isSaving && selectedFile && (
-            <Loader size="xs" />
-          )}
-        </Flex>
-
-        {/* Right: User Button */}
-        <ActionIcon
-          size="lg"
-          variant="subtle"
-          color="gray"
-          style={{
-            flex: '0 0 auto'
-          }}
-        >
-          <IconUser size={24} />
-        </ActionIcon>
-      </Flex>
+      <Header selectedFile={selectedFile} isSaving={isSaving} />
 
       {/* Main content area with sidebar */}
       <Flex style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
@@ -1139,120 +817,21 @@ function CanvasPage({ userId }: CanvasPageProps) {
             flexDirection: 'column'
           }}
         >
-          {!sidebarCollapsed && (
-            <Box style={{ padding: '16px', overflow: 'auto', flex: 1 }}>
-              <Flex justify="space-between" align="center" mb="md">
-                <Text size="sm" fw={600} style={{ color: '#666' }}>
-                  Recent Files
-                </Text>
-                <ActionIcon
-                  size="sm"
-                  variant="subtle"
-                  onClick={handleCreateFile}
-                  title="New File"
-                >
-                  <IconPlus size={16} />
-                </ActionIcon>
-              </Flex>
-
-              {filesLoading ? (
-                <Flex justify="center" py="xl">
-                  <Loader size="sm" />
-                </Flex>
-              ) : files.length === 0 ? (
-                <Text size="sm" c="dimmed" ta="center" py="xl">
-                  No files yet
-                </Text>
-              ) : (
-                <Stack gap="xs">
-                  {files.map((file) => (
-                    <Paper
-                      key={file.id}
-                      p="sm"
-                      style={{
-                        cursor: 'pointer',
-                        border: '1px solid #e9ecef',
-                        transition: 'all 0.1s ease',
-                        backgroundColor: selectedFileId === file.id ? '#f8f9fa' : 'white',
-                        borderColor: selectedFileId === file.id ? '#dee2e6' : '#e9ecef'
-                      }}
-                      onClick={() => handleFileSelect(file.id)}
-                      onDoubleClick={() => handleFileDoubleClick(file.id, file.data.name)}
-                      onMouseEnter={(e) => {
-                        if (selectedFileId !== file.id && editingFileId !== file.id) {
-                          e.currentTarget.style.backgroundColor = '#f8f9fa'
-                          e.currentTarget.style.borderColor = '#dee2e6'
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (selectedFileId !== file.id && editingFileId !== file.id) {
-                          e.currentTarget.style.backgroundColor = 'white'
-                          e.currentTarget.style.borderColor = '#e9ecef'
-                        }
-                      }}
-                    >
-                      <Group gap="sm" wrap="nowrap" style={{ justifyContent: 'space-between' }}>
-                        <Group gap="sm" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
-                          <IconFileText size={20} style={{ color: '#868e96', flexShrink: 0 }} />
-                          <Box style={{ flex: 1, minWidth: 0 }}>
-                            {editingFileId === file.id ? (
-                              <TextInput
-                                value={editingName}
-                                onChange={(e) => setEditingName(e.currentTarget.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    handleSaveFileName(file.id)
-                                  } else if (e.key === 'Escape') {
-                                    handleCancelEdit()
-                                  }
-                                  e.stopPropagation()
-                                }}
-                                onBlur={() => handleSaveFileName(file.id)}
-                                onClick={(e) => e.stopPropagation()}
-                                size="xs"
-                                autoFocus
-                                styles={{
-                                  input: {
-                                    fontSize: '14px',
-                                    fontWeight: 500,
-                                    padding: '2px 6px'
-                                  }
-                                }}
-                              />
-                            ) : (
-                              <>
-                                <Text size="sm" fw={500} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {file.data.name}
-                                </Text>
-                                <Text size="xs" c="dimmed">
-                                  {formatDate(file.data.updatedAt)}
-                                </Text>
-                              </>
-                            )}
-                          </Box>
-                        </Group>
-                        {editingFileId !== file.id && (
-                          <ActionIcon
-                            size="xs"
-                            variant="subtle"
-                            color="red"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDeleteFile(file.id)
-                            }}
-                            title="Delete file"
-                            style={{ flexShrink: 0 }}
-                          >
-                            <IconTrash size={14} />
-                          </ActionIcon>
-                        )}
-                      </Group>
-                    </Paper>
-                  ))}
-                </Stack>
-              )}
-            </Box>
-          )}
+          <FilesSidebar
+            isCollapsed={sidebarCollapsed}
+            files={files}
+            filesLoading={filesLoading}
+            selectedFileId={selectedFileId}
+            editingFileId={editingFileId}
+            editingName={editingName}
+            onCreateFile={handleCreateFile}
+            onFileSelect={handleFileSelect}
+            onFileDoubleClick={handleFileDoubleClick}
+            onDeleteFile={handleDeleteFile}
+            onEditingNameChange={setEditingName}
+            onSaveFileName={handleSaveFileName}
+            onCancelEdit={handleCancelEdit}
+          />
         </Box>
 
         {/* Sidebar toggle button */}
@@ -1283,132 +862,37 @@ function CanvasPage({ userId }: CanvasPageProps) {
             position: 'relative'
           }}
         >
-          {!selectedFileId ? (
-            // No file selected - show empty state with icon-only toolbar
-            <Flex justify="center" align="center" style={{ height: '100%', flexDirection: 'column', gap: '24px' }}>
-              <Stack align="center" gap="md">
-                <IconFileText size={64} style={{ color: '#adb5bd' }} />
-                <Text size="lg" c="dimmed">
-                  Select a file to start working
-                </Text>
-                <Text size="sm" c="dimmed">
-                  Or create a new file using the + button
-                </Text>
-              </Stack>
-
-              {/* Icon-only toolbar when no file selected */}
-              <Paper
-                shadow="md"
-                p="sm"
-                style={{
-                  display: 'flex',
-                  gap: '8px',
-                  alignItems: 'center',
-                  backgroundColor: 'white',
-                  borderRadius: '8px'
-                }}
-              >
-                <ActionIcon
-                  size="lg"
-                  variant="light"
-                  color="blue"
-                  disabled
-                  title="Rectangle"
-                >
-                  <IconSquare size={20} />
-                </ActionIcon>
-                <ActionIcon
-                  size="lg"
-                  variant="light"
-                  color="teal"
-                  disabled
-                  title="Circle"
-                >
-                  <IconCircle size={20} />
-                </ActionIcon>
-              </Paper>
-            </Flex>
-          ) : canvasLoading ? (
-            <Flex justify="center" align="center" style={{ height: '100%' }}>
-              <Stack align="center" gap="md">
-                <Loader size="lg" />
-                <Text c="dimmed">Loading canvas...</Text>
-              </Stack>
-            </Flex>
-          ) : (
-            <>
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                onSelectionChange={onSelectionChange}
-                nodeTypes={nodeTypes}
-                fitView
-              >
-                <Background />
-                <Controls />
-                <MiniMap />
-                <TagPopup
-                  isOpen={isTagPopupOpen}
-                  onClose={() => {
-                    setIsTagPopupOpen(false)
-                    setSelectedTagsForNodes([])
-                  }}
-                  availableTags={fileTags}
-                  selectedTags={selectedTagsForNodes}
-                  onTagToggle={handleTagToggle}
-                  onAddTag={handleAddTag}
-                  onRemoveTag={handleRemoveTag}
-                />
-                <FloatingColorBar
-                  selectedNodes={selectedNodes}
-                  colors={colors}
-                  updateNodeColor={updateNodeColor}
-                  onTagClick={handleTagClick}
-                  isTagPopupOpen={isTagPopupOpen}
-                />
-              </ReactFlow>
-
-              {/* Floating Toolbar - Icon-only buttons */}
-              <Paper
-                shadow="md"
-                p="sm"
-                style={{
-                  position: 'absolute',
-                  top: '20px',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  zIndex: 5,
-                  display: 'flex',
-                  gap: '8px',
-                  alignItems: 'center',
-                  backgroundColor: 'white',
-                  borderRadius: '8px'
-                }}
-              >
-                <ActionIcon
-                  size="lg"
-                  variant="light"
-                  color="blue"
-                  onClick={() => addNode('rectangle')}
-                  title="Add Rectangle"
-                >
-                  <IconSquare size={20} />
-                </ActionIcon>
-                <ActionIcon
-                  size="lg"
-                  variant="light"
-                  color="teal"
-                  onClick={() => addNode('circle')}
-                  title="Add Circle"
-                >
-                  <IconCircle size={20} />
-                </ActionIcon>
-              </Paper>
-            </>
-          )}
+          <CanvasArea
+            selectedFileId={selectedFileId}
+            canvasLoading={canvasLoading}
+            nodes={nodes}
+            edges={edges}
+            selectedNodes={selectedNodes}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onSelectionChange={onSelectionChange}
+            onNodeDoubleClick={(_, node) => {
+              setEditingNodeId(node.id)
+            }}
+            onEdgeDoubleClick={(_, edge) => {
+              setEditingEdgeId(edge.id)
+            }}
+            onAddNode={addNode}
+            isTagPopupOpen={isTagPopupOpen}
+            selectedTagsForNodes={selectedTagsForNodes}
+            fileTags={fileTags}
+            onTagClick={handleTagClick}
+            onTagPopupClose={() => {
+              setIsTagPopupOpen(false)
+              setSelectedTagsForNodes([])
+            }}
+            onTagToggle={handleTagToggle}
+            onAddTag={handleAddTag}
+            onRemoveTag={handleRemoveTag}
+            colors={colors}
+            updateNodeColor={updateNodeColor}
+          />
         </Box>
 
         {/* Right Sidebar - Hierarchy */}
@@ -1424,249 +908,29 @@ function CanvasPage({ userId }: CanvasPageProps) {
             position: 'relative'
           }}
         >
-          {/* Loading Overlay for Operations - Scoped to Sidebar */}
-          <LoadingOverlay
-            visible={isOperationInProgress}
-            overlayProps={{ blur: 2 }}
-            loaderProps={{
-              children: (
-                <Stack align="center" gap="md">
-                  <Loader size="md" />
-                  <Text size="xs" fw={500}>
-                    {operationMessage}
-                  </Text>
-                </Stack>
-              )
-            }}
+          <HierarchySidebar
+            isCollapsed={rightSidebarCollapsed}
+            selectedFileId={selectedFileId}
+            mainItems={mainItems}
+            hierarchyLoading={hierarchyLoading}
+            selectedMainItemId={selectedMainItemId}
+            selectedSubItemId={selectedSubItemId}
+            editingMainItemId={editingMainItemId}
+            editingSubItemId={editingSubItemId}
+            editingName={editingName}
+            isOperationInProgress={isOperationInProgress}
+            operationMessage={operationMessage}
+            onSubItemSelect={handleSubItemSelect}
+            onMainItemDoubleClick={handleMainItemDoubleClick}
+            onSubItemDoubleClick={handleSubItemDoubleClick}
+            onDuplicateSubItem={handleDuplicateSubItem}
+            onBranchSubItem={handleBranchSubItem}
+            onDeleteSubItem={handleDeleteSubItem}
+            onEditingNameChange={setEditingName}
+            onSaveMainItemName={handleSaveMainItemName}
+            onSaveSubItemName={handleSaveSubItemName}
+            onCancelEdit={handleCancelEdit}
           />
-          {!rightSidebarCollapsed && (
-            <Box style={{ padding: '16px', overflow: 'auto', flex: 1 }}>
-              <Text size="sm" fw={600} mb="md" style={{ color: '#666' }}>
-                Versions
-              </Text>
-
-              {!selectedFileId ? (
-                <Text size="sm" c="dimmed" ta="center" py="xl">
-                  Select a file to view hierarchy
-                </Text>
-              ) : hierarchyLoading ? (
-                <Flex justify="center" py="xl">
-                  <Loader size="sm" />
-                </Flex>
-              ) : mainItems.length === 0 ? (
-                <Text size="sm" c="dimmed" ta="center" py="xl">
-                  No hierarchy yet
-                </Text>
-              ) : (
-                <Stack gap="xs">
-                  {mainItems.map((mainItem) => (
-                    <Box key={mainItem.id}>
-                      {/* Main Item */}
-                      <Paper
-                        p="xs"
-                        style={{
-                          cursor: 'pointer',
-                          border: '1px solid #e9ecef',
-                          transition: 'all 0.1s ease',
-                          backgroundColor: 'white',
-                          marginBottom: mainItem.subItems && mainItem.subItems.length > 0 ? '4px' : '0'
-                        }}
-                        onDoubleClick={() => handleMainItemDoubleClick(mainItem.id, mainItem.data.name)}
-                        onMouseEnter={(e) => {
-                          if (editingMainItemId !== mainItem.id) {
-                            e.currentTarget.style.backgroundColor = '#f8f9fa'
-                            e.currentTarget.style.borderColor = '#dee2e6'
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (editingMainItemId !== mainItem.id) {
-                            e.currentTarget.style.backgroundColor = 'white'
-                            e.currentTarget.style.borderColor = '#e9ecef'
-                          }
-                        }}
-                      >
-                        <Group gap="xs" wrap="nowrap" style={{ justifyContent: 'space-between' }}>
-                          <Group gap="xs" wrap="nowrap" style={{ flex: 1 }}>
-                            <IconGitBranch size={16} style={{ color: '#868e96', flexShrink: 0 }} />
-                            {editingMainItemId === mainItem.id && !editingSubItemId ? (
-                              <TextInput
-                                value={editingName}
-                                onChange={(e) => setEditingName(e.currentTarget.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    handleSaveMainItemName(mainItem.id)
-                                  } else if (e.key === 'Escape') {
-                                    handleCancelEdit()
-                                  }
-                                }}
-                                onBlur={() => handleSaveMainItemName(mainItem.id)}
-                                size="xs"
-                                autoFocus
-                                style={{ flex: 1 }}
-                                styles={{
-                                  input: {
-                                    fontSize: '14px',
-                                    fontWeight: 500,
-                                    padding: '2px 6px'
-                                  }
-                                }}
-                              />
-                            ) : (
-                              <Text size="sm" fw={500}>
-                                {mainItem.data.name}
-                              </Text>
-                            )}
-                          </Group>
-                        </Group>
-                      </Paper>
-
-                      {/* Sub Items */}
-                      {mainItem.subItems && mainItem.subItems.length > 0 && (
-                        <Stack gap="xs" style={{ marginLeft: '20px', marginBottom: '8px' }}>
-                          {mainItem.subItems.map((subItem) => {
-                            const isSelected = selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id
-                            // Debug logging - log ALL sub-items to see selection state
-                            console.log('[CanvasPage] Rendering sub-item:', {
-                              subItemId: subItem.id,
-                              subItemName: subItem.data.name,
-                              mainItemId: mainItem.id,
-                              mainItemName: mainItem.data.name,
-                              selectedMainItemId,
-                              selectedSubItemId,
-                              isSelected,
-                              isDefault: subItem.data.isDefault
-                            })
-                            return (
-                              <Box key={subItem.id} style={{ position: 'relative' }}>
-                                {/* Branch line visualization */}
-                                <Box
-                                  style={{
-                                    position: 'absolute',
-                                    left: '-12px',
-                                    top: '0',
-                                    width: '12px',
-                                    height: '50%',
-                                    borderLeft: '2px solid #dee2e6',
-                                    borderBottom: '2px solid #dee2e6',
-                                    borderBottomLeftRadius: '8px'
-                                  }}
-                                />
-                                <Paper
-                                  p="xs"
-                                  style={{
-                                    cursor: 'pointer',
-                                    border: '1px solid #e9ecef',
-                                    transition: 'all 0.1s ease',
-                                    backgroundColor: isSelected ? '#e7f5ff' : 'white',
-                                    borderColor: isSelected ? '#339af0' : '#e9ecef'
-                                  }}
-                                  onClick={() => handleSubItemSelect(mainItem.id, subItem.id)}
-                                  onDoubleClick={(e) => {
-                                    e.stopPropagation()
-                                    handleSubItemDoubleClick(mainItem.id, subItem.id, subItem.data.name)
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    const isEditing = editingMainItemId === mainItem.id && editingSubItemId === subItem.id
-                                    if (!isSelected && !isEditing) {
-                                      e.currentTarget.style.backgroundColor = '#f8f9fa'
-                                      e.currentTarget.style.borderColor = '#dee2e6'
-                                    }
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    const isEditing = editingMainItemId === mainItem.id && editingSubItemId === subItem.id
-                                    if (!isSelected && !isEditing) {
-                                      e.currentTarget.style.backgroundColor = 'white'
-                                      e.currentTarget.style.borderColor = '#e9ecef'
-                                    }
-                                  }}
-                                >
-                                  <Group gap="xs" wrap="nowrap" style={{ justifyContent: 'space-between' }}>
-                                    {editingMainItemId === mainItem.id && editingSubItemId === subItem.id ? (
-                                      <TextInput
-                                        value={editingName}
-                                        onChange={(e) => setEditingName(e.currentTarget.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            handleSaveSubItemName(mainItem.id, subItem.id)
-                                          } else if (e.key === 'Escape') {
-                                            handleCancelEdit()
-                                          }
-                                          e.stopPropagation()
-                                        }}
-                                        onBlur={() => handleSaveSubItemName(mainItem.id, subItem.id)}
-                                        onClick={(e) => e.stopPropagation()}
-                                        size="xs"
-                                        autoFocus
-                                        style={{ flex: 1 }}
-                                        styles={{
-                                          input: {
-                                            fontSize: '14px',
-                                            padding: '2px 6px',
-                                            color: '#666'
-                                          }
-                                        }}
-                                      />
-                                    ) : (
-                                      <Text size="sm" c="dimmed" style={{ flex: 1 }}>
-                                        {subItem.data.name}
-                                        {subItem.data.isDefault && (
-                                          <Text component="span" size="xs" c="blue" ml={4}>
-                                            (default)
-                                          </Text>
-                                        )}
-                                      </Text>
-                                    )}
-                                    <Group gap={4} wrap="nowrap">
-                                      <ActionIcon
-                                        size="xs"
-                                        variant="subtle"
-                                        color="blue"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleDuplicateSubItem(mainItem.id, subItem.id)
-                                        }}
-                                        title="Duplicate variation (create copy in same branch)"
-                                      >
-                                        <IconCopy size={14} />
-                                      </ActionIcon>
-                                      <ActionIcon
-                                        size="xs"
-                                        variant="subtle"
-                                        color="gray"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleBranchSubItem(mainItem.id, subItem.id)
-                                        }}
-                                        title="Branch off as new main branch"
-                                      >
-                                        <IconGitFork size={14} />
-                                      </ActionIcon>
-                                      <ActionIcon
-                                        size="xs"
-                                        variant="subtle"
-                                        color="red"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleDeleteSubItem(mainItem.id, subItem.id)
-                                        }}
-                                        title="Delete variation"
-                                      >
-                                        <IconTrash size={14} />
-                                      </ActionIcon>
-                                    </Group>
-                                  </Group>
-                                </Paper>
-                              </Box>
-                            )
-                          })}
-                        </Stack>
-                      )}
-                    </Box>
-                  ))}
-                </Stack>
-              )}
-            </Box>
-          )}
         </Box>
 
         {/* Right Sidebar toggle button */}
