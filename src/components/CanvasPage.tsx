@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Box, Flex, Text, ActionIcon, Stack, Paper, Group, Loader, TextInput, LoadingOverlay } from '@mantine/core'
-import { IconUser, IconChevronLeft, IconChevronRight, IconFileText, IconGitBranch, IconGitFork, IconSquare, IconCircle, IconPlus, IconTrash, IconCopy } from '@tabler/icons-react'
-import { ReactFlow, Background, Controls, MiniMap, addEdge, useNodesState, useEdgesState, Handle, Position, type Connection, type Node, type Edge, type NodeTypes } from '@xyflow/react'
+import { Box, Flex, Text, ActionIcon, Stack, Paper, Group, Loader, TextInput, LoadingOverlay, Tooltip } from '@mantine/core'
+import { IconUser, IconChevronLeft, IconChevronRight, IconFileText, IconGitBranch, IconGitFork, IconSquare, IconCircle, IconPlus, IconTrash, IconCopy, IconHash } from '@tabler/icons-react'
+import { ReactFlow, Background, Controls, MiniMap, addEdge, useNodesState, useEdgesState, Handle, Position, type Connection, type Node, type Edge, type NodeTypes, type OnSelectionChangeParams } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { AuthDebugPanel } from './AuthDebugPanel'
 import { useProject } from '../hooks/useProject'
@@ -15,7 +15,7 @@ interface CanvasPageProps {
 }
 
 // Custom Circle Node Component
-const CircleNode = ({ data }: { data: { label: string; categories?: string[] } }) => {
+const CircleNode = ({ data, selected }: { data: { label: string; categories?: string[]; borderColor?: string }; selected?: boolean }) => {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
       <div
@@ -23,7 +23,7 @@ const CircleNode = ({ data }: { data: { label: string; categories?: string[] } }
           width: '100px',
           height: '100px',
           borderRadius: '50%',
-          border: '2px solid #1a192b',
+          border: `2px solid ${data.borderColor || '#1a192b'}`,
           backgroundColor: 'white',
           display: 'flex',
           alignItems: 'center',
@@ -32,7 +32,9 @@ const CircleNode = ({ data }: { data: { label: string; categories?: string[] } }
           fontWeight: 500,
           textAlign: 'center',
           padding: '8px',
-          position: 'relative'
+          position: 'relative',
+          boxShadow: selected ? '0 0 0 3px rgba(220, 38, 38, 0.3)' : 'none',
+          transition: 'all 0.1s ease'
         }}
       >
         <Handle type="target" position={Position.Top} />
@@ -66,18 +68,20 @@ const CircleNode = ({ data }: { data: { label: string; categories?: string[] } }
 }
 
 // Custom Rectangle Node Component
-const RectangleNode = ({ data }: { data: { label: string; categories?: string[] } }) => {
+const RectangleNode = ({ data, selected }: { data: { label: string; categories?: string[]; borderColor?: string }; selected?: boolean }) => {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
       <div
         style={{
           padding: '10px 20px',
           borderRadius: '3px',
-          border: '1px solid #1a192b',
+          border: `2px solid ${data.borderColor || '#1a192b'}`,
           backgroundColor: 'white',
           fontSize: '12px',
           fontWeight: 500,
-          position: 'relative'
+          position: 'relative',
+          boxShadow: selected ? '0 0 0 3px rgba(220, 38, 38, 0.3)' : 'none',
+          transition: 'all 0.1s ease'
         }}
       >
         <Handle type="target" position={Position.Top} />
@@ -116,6 +120,86 @@ const nodeTypes: NodeTypes = {
   rectangle: RectangleNode
 }
 
+// Color Bar Component (needs to be inside ReactFlow context)
+interface ColorBarProps {
+  selectedNodes: Node[]
+  colors: { name: string; value: string }[]
+  updateNodeColor: (color: string) => void
+}
+
+const FloatingColorBar = ({ selectedNodes, colors, updateNodeColor }: ColorBarProps) => {
+  if (selectedNodes.length === 0) return null
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        bottom: '20px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 1000,
+        pointerEvents: 'auto'
+      }}
+    >
+      <Paper
+        shadow="md"
+        p="sm"
+        style={{
+          display: 'flex',
+          gap: '8px',
+          alignItems: 'center',
+          backgroundColor: 'white',
+          borderRadius: '8px'
+        }}
+      >
+        {colors.map((color) => (
+          <Tooltip key={color.value} label={color.name} position="top" withArrow>
+            <ActionIcon
+              size="lg"
+              variant="light"
+              onClick={() => updateNodeColor(color.value)}
+              style={{
+                backgroundColor: 'white',
+                border: `2px solid ${color.value}`,
+                borderRadius: '4px'
+              }}
+              title={color.name}
+            >
+              <div
+                style={{
+                  width: '20px',
+                  height: '20px',
+                  backgroundColor: color.value,
+                  borderRadius: '2px'
+                }}
+              />
+            </ActionIcon>
+          </Tooltip>
+        ))}
+
+        {/* Divider with spacing */}
+        <div style={{ width: '1px', height: '24px', backgroundColor: '#e9ecef', marginLeft: '4px' }} />
+
+        {/* Tag button */}
+        <Tooltip label="Add Tags" position="top" withArrow>
+          <ActionIcon
+            size="lg"
+            variant="filled"
+            onClick={() => console.log('Tag button clicked')}
+            title="Add Tags"
+            style={{
+              backgroundColor: '#fef3c7',
+              color: '#92400e'
+            }}
+          >
+            <IconHash size={20} />
+          </ActionIcon>
+        </Tooltip>
+      </Paper>
+    </div>
+  )
+}
+
 function CanvasPage({ userId }: CanvasPageProps) {
   // UI State
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -140,7 +224,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
   // Firebase Hooks
   const { project, isLoading: projectLoading } = useProject(userId)
   const { files, isLoading: filesLoading, createFile } = useFiles(project?.id || null, userId)
-  const { mainItems, isLoading: hierarchyLoading, branchVariation, promoteToMain, deleteSubItem, renameMainItem, renameSubItem } = useHierarchy(selectedFileId)
+  const { mainItems, isLoading: hierarchyLoading, branchVariation, promoteToMain, deleteSubItem, deleteMainItem, renameMainItem, renameSubItem } = useHierarchy(selectedFileId)
   const {
     canvasState,
     isLoading: canvasLoading,
@@ -155,6 +239,17 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [nodeIdCounter, setNodeIdCounter] = useState(1)
+  const [selectedNodes, setSelectedNodes] = useState<Node[]>([])
+
+  // Define available colors
+  const colors = [
+    { name: 'Black', value: '#000000' },
+    { name: 'Blue', value: '#1e90ff' },
+    { name: 'Green', value: '#22c55e' },
+    { name: 'Yellow', value: '#eab308' },
+    { name: 'Red', value: '#ef4444' },
+    { name: 'Purple', value: '#a855f7' }
+  ]
 
   // Track if we're currently loading canvas state to prevent auto-save during load
   const isLoadingCanvas = useRef(false)
@@ -289,6 +384,31 @@ function CanvasPage({ userId }: CanvasPageProps) {
     setNodeIdCounter((id) => id + 1)
   }, [nodeIdCounter, setNodes])
 
+  // Handle selection changes
+  const onSelectionChange = useCallback((params: OnSelectionChangeParams) => {
+    setSelectedNodes(params.nodes)
+  }, [])
+
+  // Update node color
+  const updateNodeColor = useCallback((color: string) => {
+    if (selectedNodes.length === 0) return
+
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (selectedNodes.some(selected => selected.id === node.id)) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              borderColor: color
+            }
+          }
+        }
+        return node
+      })
+    )
+  }, [selectedNodes, setNodes])
+
   const formatDate = (timestamp: Timestamp) => {
     const date = timestamp.toDate()
     const now = new Date()
@@ -383,13 +503,55 @@ function CanvasPage({ userId }: CanvasPageProps) {
     const subItem = mainItem.subItems.find(s => s.id === subItemId)
     if (!subItem) return
 
-    // Prevent deleting the default sub-item if it's the only one
-    if (subItem.data.isDefault && mainItem.subItems.length === 1) {
-      alert("Cannot delete the last variation")
+    // Check if this is the last sub-item in the main item
+    const isLastSubItem = mainItem.subItems.length === 1
+
+    // If it's the last sub-item and there are multiple main items
+    if (isLastSubItem && mainItems.length > 1) {
+      // Confirm deletion of both sub-item and main item
+      if (!confirm(`Delete "${subItem.data.name}"?\n\nThis is the last variation in this branch. The entire branch "${mainItem.data.name}" will be deleted.`)) {
+        return
+      }
+
+      console.log('[CanvasPage] Deleting last sub-item, will also delete main item:', { mainItemId, subItemId })
+
+      // Find the previous main item to fallback to
+      const currentMainIndex = mainItems.findIndex(m => m.id === mainItemId)
+      const fallbackMainItem = currentMainIndex > 0
+        ? mainItems[currentMainIndex - 1]
+        : mainItems[mainItems.length > 1 ? 1 : 0]
+
+      // Switch to the fallback main item's first sub-item before deletion
+      if (fallbackMainItem && fallbackMainItem.subItems.length > 0) {
+        const fallbackSubItem = fallbackMainItem.subItems.find(s => s.data.isDefault) || fallbackMainItem.subItems[0]
+
+        console.log('[CanvasPage] Switching to fallback:', {
+          mainItemId: fallbackMainItem.id,
+          subItemId: fallbackSubItem.id
+        })
+
+        // Immediately mark as loading to prevent saves during transition
+        isLoadingCanvas.current = true
+        currentCanvasKey.current = null
+        setSelectedMainItemId(fallbackMainItem.id)
+        setSelectedSubItemId(fallbackSubItem.id)
+      }
+
+      // Delete the main item (which will also delete all its sub-items)
+      const success = await deleteMainItem(mainItemId)
+      if (success) {
+        console.log('[CanvasPage] Main item and its sub-items deleted successfully')
+      }
       return
     }
 
-    // Confirm deletion
+    // Prevent deleting the last sub-item if it's the only main item
+    if (isLastSubItem && mainItems.length === 1) {
+      alert("Cannot delete the last variation in the last branch")
+      return
+    }
+
+    // Confirm deletion for regular sub-item
     if (!confirm(`Delete "${subItem.data.name}"?`)) {
       return
     }
@@ -601,7 +763,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
                       style={{
                         cursor: 'pointer',
                         border: '1px solid #e9ecef',
-                        transition: 'all 0.2s ease',
+                        transition: 'all 0.1s ease',
                         backgroundColor: selectedFileId === file.id ? '#f8f9fa' : 'white',
                         borderColor: selectedFileId === file.id ? '#dee2e6' : '#e9ecef'
                       }}
@@ -726,12 +888,18 @@ function CanvasPage({ userId }: CanvasPageProps) {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
+                onSelectionChange={onSelectionChange}
                 nodeTypes={nodeTypes}
                 fitView
               >
                 <Background />
                 <Controls />
                 <MiniMap />
+                <FloatingColorBar
+                  selectedNodes={selectedNodes}
+                  colors={colors}
+                  updateNodeColor={updateNodeColor}
+                />
               </ReactFlow>
 
               {/* Floating Toolbar - Icon-only buttons */}
@@ -830,7 +998,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
                         style={{
                           cursor: 'pointer',
                           border: '1px solid #e9ecef',
-                          transition: 'all 0.2s ease',
+                          transition: 'all 0.1s ease',
                           backgroundColor: 'white',
                           marginBottom: mainItem.subItems && mainItem.subItems.length > 0 ? '4px' : '0'
                         }}
@@ -906,7 +1074,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
                                 style={{
                                   cursor: 'pointer',
                                   border: '1px solid #e9ecef',
-                                  transition: 'all 0.2s ease',
+                                  transition: 'all 0.1s ease',
                                   backgroundColor:
                                     selectedMainItemId === mainItem.id && selectedSubItemId === subItem.id
                                       ? '#e7f5ff'
