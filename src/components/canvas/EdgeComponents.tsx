@@ -34,8 +34,13 @@ export const EditableEdge = ({
 
   return (
     <>
-      <BaseEdge path={edgePath} markerEnd={markerEnd} style={style} />
+      <BaseEdge 
+        path={edgePath} 
+        markerEnd={markerEnd} 
+        style={style}
+      />
       <EdgeLabelRenderer>
+        {/* Label or text input */}
         <div
           style={{
             position: 'absolute',
@@ -93,6 +98,7 @@ export const EditableEdge = ({
             </div>
           ) : null}
         </div>
+
       </EdgeLabelRenderer>
     </>
   )

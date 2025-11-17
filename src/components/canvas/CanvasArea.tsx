@@ -87,21 +87,21 @@ export const CanvasArea = ({
         >
           <ActionIcon
             size="lg"
-            variant="light"
-            color="blue"
+            variant="transparent"
+            color="dark"
             disabled
             title="Rectangle"
           >
-            <IconSquare size={20} />
+            <IconSquare size={20} stroke={1.5} />
           </ActionIcon>
           <ActionIcon
             size="lg"
-            variant="light"
-            color="teal"
+            variant="transparent"
+            color="dark"
             disabled
             title="Circle"
           >
-            <IconCircle size={20} />
+            <IconCircle size={20} stroke={1.5} />
           </ActionIcon>
         </Paper>
       </Flex>
@@ -174,21 +174,21 @@ export const CanvasArea = ({
       >
         <ActionIcon
           size="lg"
-          variant="light"
-          color="blue"
+          variant="transparent"
+          color="dark"
           onClick={() => onAddNode('rectangle')}
           title="Add Rectangle"
         >
-          <IconSquare size={20} />
+          <IconSquare size={20} stroke={1.5} />
         </ActionIcon>
         <ActionIcon
           size="lg"
-          variant="light"
-          color="teal"
+          variant="transparent"
+          color="dark"
           onClick={() => onAddNode('circle')}
           title="Add Circle"
         >
-          <IconCircle size={20} />
+          <IconCircle size={20} stroke={1.5} />
         </ActionIcon>
       </Paper>
     </>

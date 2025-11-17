@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { Box, Flex, ActionIcon, Stack, Loader, Text } from '@mantine/core'
 import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react'
-import { addEdge, useNodesState, useEdgesState, type Connection, type Node, type Edge, type OnSelectionChangeParams } from '@xyflow/react'
+import { addEdge, useNodesState, useEdgesState, Position, type Connection, type Node, type Edge, type OnSelectionChangeParams } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { AuthDebugPanel } from './AuthDebugPanel'
 import { useProject } from '../hooks/useProject'
@@ -65,6 +65,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [nodeIdCounter, setNodeIdCounter] = useState(1)
   const [selectedNodes, setSelectedNodes] = useState<Node[]>([])
+  const [_selectedEdges, setSelectedEdges] = useState<Edge[]>([])
 
   // Tag System State
   const [isTagPopupOpen, setIsTagPopupOpen] = useState(false)
@@ -254,15 +255,45 @@ function CanvasPage({ userId }: CanvasPageProps) {
     }
 
     console.log('[CanvasPage] Canvas changed, scheduling auto-save for:', expectedCanvasKey, 'with', nodes.length, 'nodes,', edges.length, 'edges')
+
+    // Strip out functions from node data before saving to Firebase
+    const sanitizedNodes = nodes.map(node => ({
+      ...node,
+      data: {
+        label: node.data.label,
+        categories: node.data.categories,
+        borderColor: node.data.borderColor,
+        tags: node.data.tags
+        // Exclude: isEditing, onLabelChange, onEditingComplete, onAddConnectedNode
+      }
+    }))
+
+    // Strip out functions from edge data before saving
+    const sanitizedEdges = edges.map(edge => ({
+      ...edge,
+      data: edge.data ? {
+        label: edge.data.label
+        // Exclude: isEditing, onLabelChange, onEditingComplete
+      } : undefined
+    }))
+
     updateCanvas({
-      nodes: nodes as any,
-      edges: edges as any,
+      nodes: sanitizedNodes as any,
+      edges: sanitizedEdges as any,
       viewport: { x: 0, y: 0, zoom: 1 }
     })
   }, [nodes, edges, selectedFileId, selectedMainItemId, selectedSubItemId, updateCanvas])
 
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
+    (params: Connection) => {
+      // Ensure handle IDs are set for proper detection
+      const newEdge = {
+        ...params,
+        sourceHandle: params.sourceHandle || 'right-source', // Default to right if not specified
+        targetHandle: params.targetHandle || 'left-target'   // Default to left if not specified
+      }
+      setEdges((eds) => addEdge(newEdge, eds))
+    },
     [setEdges]
   )
 
@@ -280,9 +311,78 @@ function CanvasPage({ userId }: CanvasPageProps) {
     setNodeIdCounter((id) => id + 1)
   }, [nodeIdCounter, setNodes])
 
+  // Add connected node from an unconnected handle
+  const addConnectedNode = useCallback((sourceNodeId: string, handlePosition: Position, nodeType: string) => {
+    // Create a label based on node type
+    const labelMap: Record<string, string> = {
+      rectangle: 'Rectangle',
+      circle: 'Circle'
+    }
+
+    // Use functional update to avoid dependency on nodes
+    setNodes((currentNodes) => {
+      // Get the source node to calculate position
+      const sourceNode = currentNodes.find(n => n.id === sourceNodeId)
+      if (!sourceNode) return currentNodes
+
+      // Calculate position for new node based on handle position
+      const offset = 150 // Distance from source node
+      let newPosition = { x: sourceNode.position.x, y: sourceNode.position.y }
+
+      switch (handlePosition) {
+        case Position.Top:
+          newPosition = { x: sourceNode.position.x, y: sourceNode.position.y - offset }
+          break
+        case Position.Bottom:
+          newPosition = { x: sourceNode.position.x, y: sourceNode.position.y + offset }
+          break
+        case Position.Left:
+          newPosition = { x: sourceNode.position.x - offset, y: sourceNode.position.y }
+          break
+        case Position.Right:
+          newPosition = { x: sourceNode.position.x + offset, y: sourceNode.position.y }
+          break
+      }
+
+      // Create new node
+      const newNodeId = `${nodeIdCounter}`
+      const newNode: Node = {
+        id: newNodeId,
+        type: nodeType,
+        data: { label: `${labelMap[nodeType] || 'Node'} ${nodeIdCounter}` },
+        position: newPosition
+      }
+
+      // Determine target handle (opposite of source handle)
+      const oppositeHandle: Record<Position, string> = {
+        [Position.Top]: 'bottom-target',
+        [Position.Bottom]: 'top-target',
+        [Position.Left]: 'right-target',
+        [Position.Right]: 'left-target'
+      }
+
+      // Create edge connecting the nodes
+      const newEdge: Edge = {
+        id: `e${sourceNodeId}-${newNodeId}`,
+        source: sourceNodeId,
+        target: newNodeId,
+        sourceHandle: `${handlePosition.toLowerCase()}-source`,
+        targetHandle: oppositeHandle[handlePosition]
+      }
+
+      // Add edge
+      setEdges((eds) => [...eds, newEdge])
+      setNodeIdCounter((id) => id + 1)
+
+      // Return new nodes array
+      return [...currentNodes, newNode]
+    })
+  }, [nodeIdCounter, setNodes, setEdges])
+
   // Handle selection changes
   const onSelectionChange = useCallback((params: OnSelectionChangeParams) => {
     setSelectedNodes(params.nodes)
+    setSelectedEdges(params.edges)
   }, [])
 
   // Update node color
@@ -441,6 +541,13 @@ function CanvasPage({ userId }: CanvasPageProps) {
     }
   }, [fileTags])
 
+  // Store callback in ref to avoid recreating node data constantly
+  const addConnectedNodeRef = useRef(addConnectedNode)
+
+  useEffect(() => {
+    addConnectedNodeRef.current = addConnectedNode
+  }, [addConnectedNode])
+
   // Update nodes with editing state and handlers
   useEffect(() => {
     setNodes((nds) =>
@@ -450,11 +557,13 @@ function CanvasPage({ userId }: CanvasPageProps) {
           ...node.data,
           isEditing: editingNodeId === node.id,
           onLabelChange: (value: string) => handleNodeLabelChange(node.id, value),
-          onEditingComplete: handleNodeEditingComplete
+          onEditingComplete: handleNodeEditingComplete,
+          onAddConnectedNode: (nodeId: string, position: Position, nodeType: string) =>
+            addConnectedNodeRef.current(nodeId, position, nodeType)
         }
       }))
     )
-  }, [editingNodeId, handleNodeLabelChange, handleNodeEditingComplete])
+  }, [editingNodeId, handleNodeLabelChange, handleNodeEditingComplete, nodes.length])
 
   // Update edges with editing state and handlers
   useEffect(() => {
