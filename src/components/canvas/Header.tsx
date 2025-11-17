@@ -1,5 +1,6 @@
-import { Flex, Text, ActionIcon, Loader } from '@mantine/core'
-import { IconUser } from '@tabler/icons-react'
+import { Flex, Text, ActionIcon, Loader, Group } from '@mantine/core'
+import { IconUser, IconMoon, IconSun } from '@tabler/icons-react'
+import { useTheme } from '../../contexts/ThemeContext'
 
 interface FileItem {
   id: string
@@ -14,16 +15,19 @@ interface HeaderProps {
 }
 
 export const Header = ({ selectedFile, isSaving }: HeaderProps) => {
+  const { theme, toggleTheme } = useTheme()
+
   return (
     <Flex
       style={{
         height: '60px',
-        backgroundColor: 'white',
-        borderBottom: '1px solid #e0e0e0',
+        backgroundColor: 'var(--bg-primary)',
+        borderBottom: '1px solid var(--border-color)',
         padding: '0 24px',
         alignItems: 'center',
         justifyContent: 'space-between',
-        zIndex: 10
+        zIndex: 10,
+        transition: 'background-color 0.3s ease, border-color 0.3s ease'
       }}
     >
       {/* Left: App Name */}
@@ -33,7 +37,8 @@ export const Header = ({ selectedFile, isSaving }: HeaderProps) => {
         style={{
           flex: '0 0 auto',
           fontSize: '20px',
-          color: '#1a1a1a'
+          color: 'var(--text-primary)',
+          transition: 'color 0.3s ease'
         }}
       >
         ThinkPost
@@ -46,8 +51,9 @@ export const Header = ({ selectedFile, isSaving }: HeaderProps) => {
           fw={500}
           style={{
             textAlign: 'center',
-            color: selectedFile ? '#666' : '#adb5bd',
-            fontSize: '16px'
+            color: selectedFile ? 'var(--text-secondary)' : 'var(--text-tertiary)',
+            fontSize: '16px',
+            transition: 'color 0.3s ease'
           }}
         >
           {selectedFile?.data?.name || 'No File Selected'}
@@ -57,17 +63,25 @@ export const Header = ({ selectedFile, isSaving }: HeaderProps) => {
         )}
       </Flex>
 
-      {/* Right: User Button */}
-      <ActionIcon
-        size="lg"
-        variant="subtle"
-        color="gray"
-        style={{
-          flex: '0 0 auto'
-        }}
-      >
-        <IconUser size={24} />
-      </ActionIcon>
+      {/* Right: Theme Toggle & User Button */}
+      <Group gap="xs" style={{ flex: '0 0 auto' }}>
+        <ActionIcon
+          size="lg"
+          variant="subtle"
+          color="gray"
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark' ? <IconSun size={24} /> : <IconMoon size={24} />}
+        </ActionIcon>
+        <ActionIcon
+          size="lg"
+          variant="subtle"
+          color="gray"
+        >
+          <IconUser size={24} />
+        </ActionIcon>
+      </Group>
     </Flex>
   )
 }

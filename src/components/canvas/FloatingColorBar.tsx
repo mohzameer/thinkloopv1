@@ -37,8 +37,9 @@ export const FloatingColorBar = ({
           display: 'flex',
           gap: '8px',
           alignItems: 'center',
-          backgroundColor: 'white',
-          borderRadius: '8px'
+          backgroundColor: 'var(--bg-primary)',
+          borderRadius: '8px',
+          transition: 'background-color 0.3s ease'
         }}
       >
         {colors.map((color) => (
@@ -48,9 +49,10 @@ export const FloatingColorBar = ({
               variant="light"
               onClick={() => updateNodeColor(color.value)}
               style={{
-                backgroundColor: 'white',
+                backgroundColor: 'var(--bg-primary)',
                 border: `2px solid ${color.value}`,
-                borderRadius: '4px'
+                borderRadius: '4px',
+                transition: 'background-color 0.3s ease'
               }}
               title={color.name}
             >
@@ -67,7 +69,7 @@ export const FloatingColorBar = ({
         ))}
 
         {/* Divider with spacing */}
-        <div style={{ width: '1px', height: '24px', backgroundColor: '#e9ecef', marginLeft: '4px' }} />
+        <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border-color)', marginLeft: '4px', transition: 'background-color 0.3s ease' }} />
 
         {/* Tag button */}
         <Tooltip label="Add Tags" position="top" withArrow>

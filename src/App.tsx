@@ -16,7 +16,8 @@ function App() {
           alignItems: 'center',
           height: '100vh',
           width: '100vw',
-          backgroundColor: '#f5f5f5'
+          backgroundColor: 'var(--bg-secondary)',
+          transition: 'background-color 0.3s ease'
         }}
       >
         <Stack align="center" gap="lg">
@@ -43,7 +44,8 @@ function App() {
         alignItems: 'center',
         height: '100vh',
         width: '100vw',
-        backgroundColor: '#f5f5f5'
+        backgroundColor: 'var(--bg-secondary)',
+        transition: 'background-color 0.3s ease'
       }}
     >
       <Text size="lg" c="dimmed">

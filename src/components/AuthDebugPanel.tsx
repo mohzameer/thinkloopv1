@@ -50,12 +50,14 @@ export function AuthDebugPanel() {
         right: '20px',
         zIndex: 1000,
         minWidth: '300px',
-        maxWidth: '400px'
+        maxWidth: '400px',
+        backgroundColor: 'var(--bg-primary)',
+        transition: 'background-color 0.3s ease'
       }}
     >
       <Stack gap="sm">
         <Group justify="space-between">
-          <Text size="sm" fw={700}>
+          <Text size="sm" fw={700} style={{ color: 'var(--text-primary)', transition: 'color 0.3s ease' }}>
             Auth Debug Panel
           </Text>
           <Badge color={isAnonymous ? 'orange' : 'green'} size="sm">
@@ -67,7 +69,7 @@ export function AuthDebugPanel() {
           <Text size="xs" c="dimmed">
             User ID:
           </Text>
-          <Text size="xs" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+          <Text size="xs" style={{ fontFamily: 'monospace', wordBreak: 'break-all', color: 'var(--text-primary)', transition: 'color 0.3s ease' }}>
             {userId}
           </Text>
         </Stack>
@@ -77,13 +79,13 @@ export function AuthDebugPanel() {
             <Text size="xs" c="dimmed">
               Email:
             </Text>
-            <Text size="xs">{user.email}</Text>
+            <Text size="xs" style={{ color: 'var(--text-primary)', transition: 'color 0.3s ease' }}>{user.email}</Text>
           </Stack>
         )}
 
         {isAnonymous && !upgradeSuccess && (
           <Stack gap="xs">
-            <Text size="xs" fw={600}>
+            <Text size="xs" fw={600} style={{ color: 'var(--text-primary)', transition: 'color 0.3s ease' }}>
               Upgrade to Email Account:
             </Text>
             <input
@@ -95,7 +97,10 @@ export function AuthDebugPanel() {
                 padding: '6px 10px',
                 fontSize: '12px',
                 borderRadius: '4px',
-                border: '1px solid #dee2e6'
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+                transition: 'all 0.3s ease'
               }}
             />
             <input
@@ -107,7 +112,10 @@ export function AuthDebugPanel() {
                 padding: '6px 10px',
                 fontSize: '12px',
                 borderRadius: '4px',
-                border: '1px solid #dee2e6'
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+                transition: 'all 0.3s ease'
               }}
             />
             {upgradeError && (

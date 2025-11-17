@@ -64,7 +64,7 @@ export const CanvasArea = ({
     return (
       <Flex justify="center" align="center" style={{ height: '100%', flexDirection: 'column', gap: '24px' }}>
         <Stack align="center" gap="md">
-          <IconFileText size={64} style={{ color: '#adb5bd' }} />
+          <IconFileText size={64} style={{ color: 'var(--text-tertiary)', transition: 'color 0.3s ease' }} />
           <Text size="lg" c="dimmed">
             Select a file to start working
           </Text>
@@ -81,25 +81,27 @@ export const CanvasArea = ({
             display: 'flex',
             gap: '8px',
             alignItems: 'center',
-            backgroundColor: 'white',
-            borderRadius: '8px'
+            backgroundColor: 'var(--bg-primary)',
+            borderRadius: '8px',
+            border: '1px solid var(--border-color)',
+            transition: 'background-color 0.3s ease, border-color 0.3s ease'
           }}
         >
           <ActionIcon
             size="lg"
             variant="transparent"
-            color="dark"
             disabled
             title="Rectangle"
+            style={{ color: 'var(--text-tertiary)' }}
           >
             <IconSquare size={20} stroke={1.5} />
           </ActionIcon>
           <ActionIcon
             size="lg"
             variant="transparent"
-            color="dark"
             disabled
             title="Circle"
+            style={{ color: 'var(--text-tertiary)' }}
           >
             <IconCircle size={20} stroke={1.5} />
           </ActionIcon>
@@ -168,25 +170,27 @@ export const CanvasArea = ({
           display: 'flex',
           gap: '8px',
           alignItems: 'center',
-          backgroundColor: 'white',
-          borderRadius: '8px'
+          backgroundColor: 'var(--bg-primary)',
+          borderRadius: '8px',
+          border: '1px solid var(--border-color)',
+          transition: 'background-color 0.3s ease, border-color 0.3s ease'
         }}
       >
         <ActionIcon
           size="lg"
           variant="transparent"
-          color="dark"
           onClick={() => onAddNode('rectangle')}
           title="Add Rectangle"
+          style={{ color: 'var(--text-primary)' }}
         >
           <IconSquare size={20} stroke={1.5} />
         </ActionIcon>
         <ActionIcon
           size="lg"
           variant="transparent"
-          color="dark"
           onClick={() => onAddNode('circle')}
           title="Add Circle"
+          style={{ color: 'var(--text-primary)' }}
         >
           <IconCircle size={20} stroke={1.5} />
         </ActionIcon>

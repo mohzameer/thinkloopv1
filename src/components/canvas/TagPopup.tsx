@@ -53,16 +53,17 @@ export const TagPopup = ({
         p="md"
         style={{
           width: '280px',
-          backgroundColor: 'white',
+          backgroundColor: 'var(--bg-primary)',
           borderRadius: '8px',
           maxHeight: '400px',
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          transition: 'background-color 0.3s ease'
         }}
       >
         {/* Header */}
         <Flex justify="space-between" align="center" mb="sm">
-          <Text size="sm" fw={600}>Select Tags</Text>
+          <Text size="sm" fw={600} style={{ color: 'var(--text-primary)', transition: 'color 0.3s ease' }}>Select Tags</Text>
           <CloseButton size="sm" onClick={onClose} />
         </Flex>
 

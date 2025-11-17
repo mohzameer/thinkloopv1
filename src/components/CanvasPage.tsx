@@ -885,7 +885,14 @@ function CanvasPage({ userId }: CanvasPageProps) {
   // Show loading state
   if (projectLoading || filesLoading) {
     return (
-      <Box style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <Box style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        backgroundColor: 'var(--bg-secondary)',
+        transition: 'background-color 0.3s ease'
+      }}>
         <Stack align="center" gap="md">
           <Loader size="lg" />
           <Text c="dimmed">Loading ThinkPost...</Text>
@@ -899,14 +906,15 @@ function CanvasPage({ userId }: CanvasPageProps) {
       style={{
         width: '100vw',
         height: '100vh',
-        backgroundColor: '#f5f5f5',
+        backgroundColor: 'var(--bg-secondary)',
         display: 'flex',
         flexDirection: 'column',
         margin: 0,
         padding: 0,
         position: 'fixed',
         top: 0,
-        left: 0
+        left: 0,
+        transition: 'background-color 0.3s ease'
       }}
     >
       {/* Header Bar */}
@@ -918,9 +926,9 @@ function CanvasPage({ userId }: CanvasPageProps) {
         <Box
           style={{
             width: sidebarWidth,
-            backgroundColor: 'white',
-            borderRight: sidebarCollapsed ? 'none' : '1px solid #e0e0e0',
-            transition: 'width 0.3s ease',
+            backgroundColor: 'var(--bg-primary)',
+            borderRight: sidebarCollapsed ? 'none' : '1px solid var(--border-color)',
+            transition: 'width 0.3s ease, background-color 0.3s ease, border-color 0.3s ease',
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column'
@@ -953,10 +961,10 @@ function CanvasPage({ userId }: CanvasPageProps) {
             position: 'absolute',
             left: sidebarCollapsed ? '8px' : `${sidebarWidth - 12}px`,
             top: '16px',
-            transition: 'left 0.3s ease',
+            transition: 'left 0.3s ease, background-color 0.3s ease, border-color 0.3s ease',
             zIndex: 5,
-            backgroundColor: 'white',
-            border: '1px solid #e0e0e0',
+            backgroundColor: 'var(--bg-primary)',
+            border: '1px solid var(--border-color)',
             borderRadius: '4px'
           }}
         >
@@ -1008,9 +1016,9 @@ function CanvasPage({ userId }: CanvasPageProps) {
         <Box
           style={{
             width: rightSidebarWidth,
-            backgroundColor: 'white',
-            borderLeft: rightSidebarCollapsed ? 'none' : '1px solid #e0e0e0',
-            transition: 'width 0.3s ease',
+            backgroundColor: 'var(--bg-primary)',
+            borderLeft: rightSidebarCollapsed ? 'none' : '1px solid var(--border-color)',
+            transition: 'width 0.3s ease, background-color 0.3s ease, border-color 0.3s ease',
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
@@ -1052,10 +1060,10 @@ function CanvasPage({ userId }: CanvasPageProps) {
             position: 'absolute',
             right: rightSidebarCollapsed ? '8px' : `${rightSidebarWidth - 12}px`,
             top: '16px',
-            transition: 'right 0.3s ease',
+            transition: 'right 0.3s ease, background-color 0.3s ease, border-color 0.3s ease',
             zIndex: 5,
-            backgroundColor: 'white',
-            border: '1px solid #e0e0e0',
+            backgroundColor: 'var(--bg-primary)',
+            border: '1px solid var(--border-color)',
             borderRadius: '4px'
           }}
         >

@@ -208,8 +208,8 @@ export const CircleNode = ({ id, data, selected }: NodeProps) => {
           width: '100px',
           height: '100px',
           borderRadius: '50%',
-          border: `2px solid ${data.borderColor || '#1a192b'}`,
-          backgroundColor: 'white',
+          border: `2px solid ${data.borderColor || 'var(--node-border)'}`,
+          backgroundColor: 'transparent',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -219,7 +219,8 @@ export const CircleNode = ({ id, data, selected }: NodeProps) => {
           padding: '8px',
           position: 'relative',
           boxShadow: selected ? '0 0 0 3px rgba(220, 38, 38, 0.3)' : 'none',
-          transition: 'all 0.1s ease'
+          transition: 'all 0.3s ease',
+          color: 'var(--text-primary)'
         }}
       >
         <Handle type="target" position={Position.Top} id="top-target" />
@@ -312,13 +313,14 @@ export const RectangleNode = ({ id, data, selected }: NodeProps) => {
         style={{
           padding: '10px 20px',
           borderRadius: '3px',
-          border: `2px solid ${data.borderColor || '#1a192b'}`,
-          backgroundColor: 'white',
+          border: `2px solid ${data.borderColor || 'var(--node-border)'}`,
+          backgroundColor: 'transparent',
           fontSize: '12px',
           fontWeight: 500,
           position: 'relative',
           boxShadow: selected ? '0 0 0 3px rgba(220, 38, 38, 0.3)' : 'none',
-          transition: 'all 0.1s ease'
+          transition: 'all 0.3s ease',
+          color: 'var(--text-primary)'
         }}
       >
         <Handle type="target" position={Position.Top} id="top-target" />
@@ -419,15 +421,15 @@ export const DiamondNode = ({ id, data, selected }: NodeProps) => {
             height: '71px',
             transform: 'rotate(45deg)',
             transformOrigin: 'center',
-            border: `2px solid ${data.borderColor || '#1a192b'}`,
-            backgroundColor: 'white',
+            border: `2px solid ${data.borderColor || 'var(--node-border)'}`,
+            backgroundColor: 'transparent',
             position: 'absolute',
             top: '50%',
             left: '50%',
             marginLeft: '-35.5px',
             marginTop: '-35.5px',
             boxShadow: selected ? '0 0 0 3px rgba(220, 38, 38, 0.3)' : 'none',
-            transition: 'all 0.1s ease'
+            transition: 'all 0.3s ease'
           }}
         />
         <div
@@ -444,7 +446,9 @@ export const DiamondNode = ({ id, data, selected }: NodeProps) => {
             textAlign: 'center',
             padding: '8px',
             maxWidth: '60px',
-            zIndex: 1
+            zIndex: 1,
+            color: 'var(--text-primary)',
+            transition: 'color 0.3s ease'
           }}
         >
           {data.isEditing ? (
@@ -552,12 +556,12 @@ export const TriangleNode = ({ id, data, selected }: NodeProps) => {
         >
           <polygon
             points="50,10 90,85 10,85"
-            fill="white"
-            stroke={data.borderColor || '#1a192b'}
+            fill="transparent"
+            stroke={data.borderColor || 'var(--node-border)'}
             strokeWidth="2"
             style={{
               filter: selected ? 'drop-shadow(0 0 3px rgba(220, 38, 38, 0.3))' : 'none',
-              transition: 'all 0.1s ease'
+              transition: 'all 0.3s ease'
             }}
           />
         </svg>
@@ -575,7 +579,9 @@ export const TriangleNode = ({ id, data, selected }: NodeProps) => {
             textAlign: 'center',
             padding: '8px',
             maxWidth: '60px',
-            zIndex: 1
+            zIndex: 1,
+            color: 'var(--text-primary)',
+            transition: 'color 0.3s ease'
           }}
         >
           {data.isEditing ? (

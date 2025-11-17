@@ -84,7 +84,7 @@ export const HierarchySidebar = ({
         }}
       />
       <Box style={{ padding: '16px', overflow: 'auto', flex: 1 }}>
-        <Text size="sm" fw={600} mb="md" style={{ color: '#666' }}>
+        <Text size="sm" fw={600} mb="md" style={{ color: 'var(--text-secondary)', transition: 'color 0.3s ease' }}>
           Versions
         </Text>
 
@@ -109,28 +109,28 @@ export const HierarchySidebar = ({
                   p="xs"
                   style={{
                     cursor: 'pointer',
-                    border: '1px solid #e9ecef',
-                    transition: 'all 0.1s ease',
-                    backgroundColor: 'white',
+                    border: '1px solid var(--border-color-light)',
+                    transition: 'all 0.3s ease',
+                    backgroundColor: 'var(--bg-primary)',
                     marginBottom: mainItem.subItems && mainItem.subItems.length > 0 ? '4px' : '0'
                   }}
                   onDoubleClick={() => onMainItemDoubleClick(mainItem.id, mainItem.data.name)}
                   onMouseEnter={(e) => {
                     if (editingMainItemId !== mainItem.id) {
-                      e.currentTarget.style.backgroundColor = '#f8f9fa'
-                      e.currentTarget.style.borderColor = '#dee2e6'
+                      e.currentTarget.style.backgroundColor = 'var(--hover-bg)'
+                      e.currentTarget.style.borderColor = 'var(--border-color)'
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (editingMainItemId !== mainItem.id) {
-                      e.currentTarget.style.backgroundColor = 'white'
-                      e.currentTarget.style.borderColor = '#e9ecef'
+                      e.currentTarget.style.backgroundColor = 'var(--bg-primary)'
+                      e.currentTarget.style.borderColor = 'var(--border-color-light)'
                     }
                   }}
                 >
                   <Group gap="xs" wrap="nowrap" style={{ justifyContent: 'space-between' }}>
                     <Group gap="xs" wrap="nowrap" style={{ flex: 1 }}>
-                      <IconGitBranch size={16} style={{ color: '#868e96', flexShrink: 0 }} />
+                      <IconGitBranch size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0, transition: 'color 0.3s ease' }} />
                       {editingMainItemId === mainItem.id && !editingSubItemId ? (
                         <TextInput
                           value={editingName}
@@ -150,12 +150,15 @@ export const HierarchySidebar = ({
                             input: {
                               fontSize: '14px',
                               fontWeight: 500,
-                              padding: '2px 6px'
+                              padding: '2px 6px',
+                              backgroundColor: 'var(--bg-primary)',
+                              color: 'var(--text-primary)',
+                              borderColor: 'var(--border-color)'
                             }
                           }}
                         />
                       ) : (
-                        <Text size="sm" fw={500}>
+                        <Text size="sm" fw={500} style={{ color: 'var(--text-primary)', transition: 'color 0.3s ease' }}>
                           {mainItem.data.name}
                         </Text>
                       )}
@@ -178,19 +181,20 @@ export const HierarchySidebar = ({
                               top: '0',
                               width: '12px',
                               height: '50%',
-                              borderLeft: '2px solid #dee2e6',
-                              borderBottom: '2px solid #dee2e6',
-                              borderBottomLeftRadius: '8px'
+                              borderLeft: '2px solid var(--border-color)',
+                              borderBottom: '2px solid var(--border-color)',
+                              borderBottomLeftRadius: '8px',
+                              transition: 'border-color 0.3s ease'
                             }}
                           />
                           <Paper
                             p="xs"
                             style={{
                               cursor: 'pointer',
-                              border: '1px solid #e9ecef',
-                              transition: 'all 0.1s ease',
-                              backgroundColor: isSelected ? '#e7f5ff' : 'white',
-                              borderColor: isSelected ? '#339af0' : '#e9ecef'
+                              border: '1px solid var(--border-color-light)',
+                              transition: 'all 0.3s ease',
+                              backgroundColor: isSelected ? '#e7f5ff' : 'var(--bg-primary)',
+                              borderColor: isSelected ? '#339af0' : 'var(--border-color-light)'
                             }}
                             onClick={() => onSubItemSelect(mainItem.id, subItem.id)}
                             onDoubleClick={(e) => {
@@ -200,15 +204,15 @@ export const HierarchySidebar = ({
                             onMouseEnter={(e) => {
                               const isEditing = editingMainItemId === mainItem.id && editingSubItemId === subItem.id
                               if (!isSelected && !isEditing) {
-                                e.currentTarget.style.backgroundColor = '#f8f9fa'
-                                e.currentTarget.style.borderColor = '#dee2e6'
+                                e.currentTarget.style.backgroundColor = 'var(--hover-bg)'
+                                e.currentTarget.style.borderColor = 'var(--border-color)'
                               }
                             }}
                             onMouseLeave={(e) => {
                               const isEditing = editingMainItemId === mainItem.id && editingSubItemId === subItem.id
                               if (!isSelected && !isEditing) {
-                                e.currentTarget.style.backgroundColor = 'white'
-                                e.currentTarget.style.borderColor = '#e9ecef'
+                                e.currentTarget.style.backgroundColor = 'var(--bg-primary)'
+                                e.currentTarget.style.borderColor = 'var(--border-color-light)'
                               }
                             }}
                           >
@@ -234,7 +238,9 @@ export const HierarchySidebar = ({
                                     input: {
                                       fontSize: '14px',
                                       padding: '2px 6px',
-                                      color: '#666'
+                                      backgroundColor: 'var(--bg-primary)',
+                                      color: 'var(--text-secondary)',
+                                      borderColor: 'var(--border-color)'
                                     }
                                   }}
                                 />

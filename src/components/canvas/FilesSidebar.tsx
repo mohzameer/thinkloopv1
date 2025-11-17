@@ -60,7 +60,7 @@ export const FilesSidebar = ({
   return (
     <Box style={{ padding: '16px', overflow: 'auto', flex: 1 }}>
       <Flex justify="space-between" align="center" mb="md">
-        <Text size="sm" fw={600} style={{ color: '#666' }}>
+        <Text size="sm" fw={600} style={{ color: 'var(--text-secondary)', transition: 'color 0.3s ease' }}>
           Recent Files
         </Text>
         <ActionIcon
@@ -89,29 +89,29 @@ export const FilesSidebar = ({
               p="sm"
               style={{
                 cursor: 'pointer',
-                border: '1px solid #e9ecef',
-                transition: 'all 0.1s ease',
-                backgroundColor: selectedFileId === file.id ? '#f8f9fa' : 'white',
-                borderColor: selectedFileId === file.id ? '#dee2e6' : '#e9ecef'
+                border: '1px solid var(--border-color-light)',
+                transition: 'all 0.3s ease',
+                backgroundColor: selectedFileId === file.id ? 'var(--hover-bg)' : 'var(--bg-primary)',
+                borderColor: selectedFileId === file.id ? 'var(--border-color)' : 'var(--border-color-light)'
               }}
               onClick={() => onFileSelect(file.id)}
               onDoubleClick={() => onFileDoubleClick(file.id, file.data.name)}
               onMouseEnter={(e) => {
                 if (selectedFileId !== file.id && editingFileId !== file.id) {
-                  e.currentTarget.style.backgroundColor = '#f8f9fa'
-                  e.currentTarget.style.borderColor = '#dee2e6'
+                  e.currentTarget.style.backgroundColor = 'var(--hover-bg)'
+                  e.currentTarget.style.borderColor = 'var(--border-color)'
                 }
               }}
               onMouseLeave={(e) => {
                 if (selectedFileId !== file.id && editingFileId !== file.id) {
-                  e.currentTarget.style.backgroundColor = 'white'
-                  e.currentTarget.style.borderColor = '#e9ecef'
+                  e.currentTarget.style.backgroundColor = 'var(--bg-primary)'
+                  e.currentTarget.style.borderColor = 'var(--border-color-light)'
                 }
               }}
             >
               <Group gap="sm" wrap="nowrap" style={{ justifyContent: 'space-between' }}>
                 <Group gap="sm" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
-                  <IconFileText size={20} style={{ color: '#868e96', flexShrink: 0 }} />
+                  <IconFileText size={20} style={{ color: 'var(--text-secondary)', flexShrink: 0, transition: 'color 0.3s ease' }} />
                   <Box style={{ flex: 1, minWidth: 0 }}>
                     {editingFileId === file.id ? (
                       <TextInput
@@ -133,13 +133,22 @@ export const FilesSidebar = ({
                           input: {
                             fontSize: '14px',
                             fontWeight: 500,
-                            padding: '2px 6px'
+                            padding: '2px 6px',
+                            backgroundColor: 'var(--bg-primary)',
+                            color: 'var(--text-primary)',
+                            borderColor: 'var(--border-color)'
                           }
                         }}
                       />
                     ) : (
                       <>
-                        <Text size="sm" fw={500} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <Text size="sm" fw={500} style={{ 
+                          overflow: 'hidden', 
+                          textOverflow: 'ellipsis', 
+                          whiteSpace: 'nowrap',
+                          color: 'var(--text-primary)',
+                          transition: 'color 0.3s ease'
+                        }}>
                           {file.data.name}
                         </Text>
                         <Text size="xs" c="dimmed">
