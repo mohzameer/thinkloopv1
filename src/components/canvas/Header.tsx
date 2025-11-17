@@ -1,6 +1,8 @@
 import { Flex, Text, ActionIcon, Loader, Group } from '@mantine/core'
 import { IconUser, IconMoon, IconSun } from '@tabler/icons-react'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useState } from 'react'
+import { AuthModal } from '../AuthModal'
 
 interface FileItem {
   id: string
@@ -16,8 +18,10 @@ interface HeaderProps {
 
 export const Header = ({ selectedFile, isSaving }: HeaderProps) => {
   const { theme, toggleTheme } = useTheme()
+  const [authModalOpened, setAuthModalOpened] = useState(false)
 
   return (
+    <>
     <Flex
       style={{
         height: '60px',
@@ -78,11 +82,19 @@ export const Header = ({ selectedFile, isSaving }: HeaderProps) => {
           size="lg"
           variant="subtle"
           color="gray"
+          onClick={() => setAuthModalOpened(true)}
+          title="Account"
         >
           <IconUser size={24} />
         </ActionIcon>
       </Group>
     </Flex>
+
+    <AuthModal
+      opened={authModalOpened}
+      onClose={() => setAuthModalOpened(false)}
+    />
+    </>
   )
 }
 

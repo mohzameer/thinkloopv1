@@ -3,14 +3,12 @@ import { Box, Flex, ActionIcon, Stack, Loader, Text } from '@mantine/core'
 import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react'
 import { addEdge, useNodesState, useEdgesState, Position, type Connection, type Node, type Edge, type OnSelectionChangeParams } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { AuthDebugPanel } from './AuthDebugPanel'
 import { useProject } from '../hooks/useProject'
 import { useFiles } from '../hooks/useFiles'
 import { useHierarchy } from '../hooks/useHierarchy'
 import { useCanvas } from '../hooks/useCanvas'
 import type { Tag } from '../types/firebase'
 import { Header } from './canvas/Header'
-import { FilesSidebar } from './canvas/FilesSidebar'
 import { HierarchySidebar } from './canvas/HierarchySidebar'
 import { CanvasArea } from './canvas/CanvasArea'
 
@@ -20,10 +18,8 @@ interface CanvasPageProps {
 
 function CanvasPage({ userId }: CanvasPageProps) {
   // UI State
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
-  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const sidebarWidth = sidebarCollapsed ? 0 : 280
-  const rightSidebarWidth = rightSidebarCollapsed ? 0 : 300
 
   // Selection State
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
@@ -31,7 +27,6 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const [selectedSubItemId, setSelectedSubItemId] = useState<string | null>(null)
 
   // Editing State
-  const [editingFileId, setEditingFileId] = useState<string | null>(null)
   const [editingMainItemId, setEditingMainItemId] = useState<string | null>(null)
   const [editingSubItemId, setEditingSubItemId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
@@ -48,7 +43,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
   // Firebase Hooks
   const { project, isLoading: projectLoading } = useProject(userId)
-  const { files, isLoading: filesLoading, createFile, renameFile, deleteFile, updateTags: updateFileTagsLocal } = useFiles(project?.id || null, userId)
+  const { files, isLoading: filesLoading, updateTags: updateFileTagsLocal } = useFiles(project?.id || null, userId)
   const { mainItems, isLoading: hierarchyLoading, branchVariation, promoteToMain, deleteSubItem, deleteMainItem, renameMainItem, renameSubItem } = useHierarchy(selectedFileId)
   const {
     canvasState,
@@ -581,83 +576,6 @@ function CanvasPage({ userId }: CanvasPageProps) {
   }, [editingEdgeId, handleEdgeLabelChange, handleEdgeEditingComplete])
 
 
-  const handleFileSelect = (fileId: string) => {
-    console.log('[CanvasPage] Selecting file:', fileId, '(clearing main/sub item selection)')
-    // Immediately mark as loading to prevent saves during transition
-    isLoadingCanvas.current = true
-    // Clear the current canvas key to prevent saves to old location
-    currentCanvasKey.current = null
-
-    setSelectedFileId(fileId)
-    setSelectedMainItemId(null)
-    setSelectedSubItemId(null)
-    console.log('[CanvasPage] State updates queued - main/sub items set to null')
-  }
-
-  const handleCreateFile = async () => {
-    console.log('[CanvasPage] Creating new file...')
-
-    // Immediately mark as loading to prevent saves during transition
-    isLoadingCanvas.current = true
-    // Clear the current canvas key to prevent saves to old location
-    currentCanvasKey.current = null
-
-    const fileId = await createFile('Untitled')
-    if (fileId) {
-      console.log('[CanvasPage] New file created:', fileId)
-      // Select the newly created file
-      setSelectedFileId(fileId)
-      // Clear main/sub item selection - they will be auto-selected when hierarchy loads
-      setSelectedMainItemId(null)
-      setSelectedSubItemId(null)
-      console.log('[CanvasPage] File selected, waiting for hierarchy to load...')
-    }
-  }
-
-  const handleDeleteFile = async (fileId: string) => {
-    const file = files.find(f => f.id === fileId)
-    if (!file) return
-
-    // Confirm deletion
-    if (!confirm(`Delete "${file.data.name}"?\n\nThis will permanently delete the file and all its content.`)) {
-      return
-    }
-
-    console.log('[CanvasPage] Deleting file:', fileId)
-
-    // If this is the currently selected file, switch to another file first
-    if (selectedFileId === fileId) {
-      // Find a fallback file (prefer previous file in the list)
-      const currentIndex = files.findIndex(f => f.id === fileId)
-      const fallbackFile = currentIndex > 0
-        ? files[currentIndex - 1]
-        : files.length > 1 ? files[currentIndex + 1] : null
-
-      if (fallbackFile) {
-        console.log('[CanvasPage] Switching to fallback file:', fallbackFile.id)
-        // Immediately mark as loading to prevent saves during transition
-        isLoadingCanvas.current = true
-        currentCanvasKey.current = null
-        setSelectedFileId(fallbackFile.id)
-        setSelectedMainItemId(null)
-        setSelectedSubItemId(null)
-      } else {
-        // No other files, clear selection
-        console.log('[CanvasPage] No fallback file, clearing selection')
-        isLoadingCanvas.current = true
-        currentCanvasKey.current = null
-        setSelectedFileId(null)
-        setSelectedMainItemId(null)
-        setSelectedSubItemId(null)
-      }
-    }
-
-    // Delete the file
-    const success = await deleteFile(fileId)
-    if (success) {
-      console.log('[CanvasPage] File deleted successfully')
-    }
-  }
 
   const handleSubItemSelect = (mainItemId: string, subItemId: string) => {
     console.log('[CanvasPage] Selecting sub-item:', { mainItemId, subItemId })
@@ -812,12 +730,6 @@ function CanvasPage({ userId }: CanvasPageProps) {
   }
 
   // Rename handlers
-  const handleFileDoubleClick = (fileId: string, currentName: string) => {
-    console.log('[CanvasPage] Starting edit for file:', fileId)
-    setEditingFileId(fileId)
-    setEditingName(currentName)
-  }
-
   const handleMainItemDoubleClick = (mainItemId: string, currentName: string) => {
     console.log('[CanvasPage] Starting edit for main item:', mainItemId)
     setEditingMainItemId(mainItemId)
@@ -829,20 +741,6 @@ function CanvasPage({ userId }: CanvasPageProps) {
     setEditingMainItemId(mainItemId)
     setEditingSubItemId(subItemId)
     setEditingName(currentName)
-  }
-
-  const handleSaveFileName = async (fileId: string) => {
-    if (!editingName.trim()) {
-      setEditingFileId(null)
-      return
-    }
-
-    console.log('[CanvasPage] Saving file name:', editingName)
-    const success = await renameFile(fileId, editingName.trim())
-    if (success) {
-      setEditingFileId(null)
-      setEditingName('')
-    }
   }
 
   const handleSaveMainItemName = async (mainItemId: string) => {
@@ -876,7 +774,6 @@ function CanvasPage({ userId }: CanvasPageProps) {
   }
 
   const handleCancelEdit = () => {
-    setEditingFileId(null)
     setEditingMainItemId(null)
     setEditingSubItemId(null)
     setEditingName('')
@@ -922,7 +819,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
       {/* Main content area with sidebar */}
       <Flex style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-        {/* Left Sidebar - Files */}
+        {/* Left Sidebar - Hierarchy (Versions) */}
         <Box
           style={{
             width: sidebarWidth,
@@ -931,27 +828,36 @@ function CanvasPage({ userId }: CanvasPageProps) {
             transition: 'width 0.3s ease, background-color 0.3s ease, border-color 0.3s ease',
             overflow: 'hidden',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            position: 'relative'
           }}
         >
-          <FilesSidebar
+          <HierarchySidebar
             isCollapsed={sidebarCollapsed}
-            files={files}
-            filesLoading={filesLoading}
             selectedFileId={selectedFileId}
-            editingFileId={editingFileId}
+            mainItems={mainItems}
+            hierarchyLoading={hierarchyLoading}
+            selectedMainItemId={selectedMainItemId}
+            selectedSubItemId={selectedSubItemId}
+            editingMainItemId={editingMainItemId}
+            editingSubItemId={editingSubItemId}
             editingName={editingName}
-            onCreateFile={handleCreateFile}
-            onFileSelect={handleFileSelect}
-            onFileDoubleClick={handleFileDoubleClick}
-            onDeleteFile={handleDeleteFile}
+            isOperationInProgress={isOperationInProgress}
+            operationMessage={operationMessage}
+            onSubItemSelect={handleSubItemSelect}
+            onMainItemDoubleClick={handleMainItemDoubleClick}
+            onSubItemDoubleClick={handleSubItemDoubleClick}
+            onDuplicateSubItem={handleDuplicateSubItem}
+            onBranchSubItem={handleBranchSubItem}
+            onDeleteSubItem={handleDeleteSubItem}
             onEditingNameChange={setEditingName}
-            onSaveFileName={handleSaveFileName}
+            onSaveMainItemName={handleSaveMainItemName}
+            onSaveSubItemName={handleSaveSubItemName}
             onCancelEdit={handleCancelEdit}
           />
         </Box>
 
-        {/* Sidebar toggle button */}
+        {/* Left Sidebar toggle button */}
         <ActionIcon
           size="md"
           variant="subtle"
@@ -1011,68 +917,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
             updateNodeColor={updateNodeColor}
           />
         </Box>
-
-        {/* Right Sidebar - Hierarchy */}
-        <Box
-          style={{
-            width: rightSidebarWidth,
-            backgroundColor: 'var(--bg-primary)',
-            borderLeft: rightSidebarCollapsed ? 'none' : '1px solid var(--border-color)',
-            transition: 'width 0.3s ease, background-color 0.3s ease, border-color 0.3s ease',
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            position: 'relative'
-          }}
-        >
-          <HierarchySidebar
-            isCollapsed={rightSidebarCollapsed}
-            selectedFileId={selectedFileId}
-            mainItems={mainItems}
-            hierarchyLoading={hierarchyLoading}
-            selectedMainItemId={selectedMainItemId}
-            selectedSubItemId={selectedSubItemId}
-            editingMainItemId={editingMainItemId}
-            editingSubItemId={editingSubItemId}
-            editingName={editingName}
-            isOperationInProgress={isOperationInProgress}
-            operationMessage={operationMessage}
-            onSubItemSelect={handleSubItemSelect}
-            onMainItemDoubleClick={handleMainItemDoubleClick}
-            onSubItemDoubleClick={handleSubItemDoubleClick}
-            onDuplicateSubItem={handleDuplicateSubItem}
-            onBranchSubItem={handleBranchSubItem}
-            onDeleteSubItem={handleDeleteSubItem}
-            onEditingNameChange={setEditingName}
-            onSaveMainItemName={handleSaveMainItemName}
-            onSaveSubItemName={handleSaveSubItemName}
-            onCancelEdit={handleCancelEdit}
-          />
-        </Box>
-
-        {/* Right Sidebar toggle button */}
-        <ActionIcon
-          size="md"
-          variant="subtle"
-          color="gray"
-          onClick={() => setRightSidebarCollapsed(!rightSidebarCollapsed)}
-          style={{
-            position: 'absolute',
-            right: rightSidebarCollapsed ? '8px' : `${rightSidebarWidth - 12}px`,
-            top: '16px',
-            transition: 'right 0.3s ease, background-color 0.3s ease, border-color 0.3s ease',
-            zIndex: 5,
-            backgroundColor: 'var(--bg-primary)',
-            border: '1px solid var(--border-color)',
-            borderRadius: '4px'
-          }}
-        >
-          {rightSidebarCollapsed ? <IconChevronLeft size={18} /> : <IconChevronRight size={18} />}
-        </ActionIcon>
       </Flex>
-
-      {/* Auth Debug Panel - Remove in production */}
-      <AuthDebugPanel />
     </Box>
   )
 }
