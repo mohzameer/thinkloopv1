@@ -1,4 +1,5 @@
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps, type EdgeTypes } from '@xyflow/react'
+import React from 'react'
+import { EdgeLabelRenderer, getBezierPath, type EdgeProps, type EdgeTypes } from '@xyflow/react'
 import { Textarea } from '@mantine/core'
 
 interface EdgeData {
@@ -34,11 +35,31 @@ export const EditableEdge = ({
 
   return (
     <>
-      <BaseEdge 
-        path={edgePath} 
-        markerEnd={markerEnd} 
-        style={style}
-      />
+      <g>
+        <defs>
+          <style>
+            {`
+              @keyframes dash {
+                to {
+                  stroke-dashoffset: -20;
+                }
+              }
+              .animated-dotted-edge {
+                stroke-dasharray: 5 5;
+                animation: dash 1s linear infinite;
+              }
+            `}
+          </style>
+        </defs>
+        <path
+          d={edgePath}
+          fill="none"
+          stroke={(style as React.CSSProperties)?.stroke as string || '#b1b1b7'}
+          strokeWidth={(style as React.CSSProperties)?.strokeWidth as number || 1}
+          markerEnd={markerEnd}
+          className="animated-dotted-edge"
+        />
+      </g>
       <EdgeLabelRenderer>
         {/* Label or text input */}
         <div

@@ -1,5 +1,5 @@
 import { Paper, Text, Textarea, ActionIcon, Box, Flex } from '@mantine/core'
-import { IconX, IconCheck } from '@tabler/icons-react'
+import { IconX, IconCheck, IconTrash } from '@tabler/icons-react'
 import { useState, useEffect, useRef } from 'react'
 
 interface NotePopupProps {
@@ -87,6 +87,14 @@ export function NotePopup({ x, y, content, onClose, onSave, onDelete }: NotePopu
             }}
           />
           <Flex justify="flex-end" gap="xs">
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={onClose}
+              title="Close"
+            >
+              <IconX size={18} />
+            </ActionIcon>
             {onDelete && (
               <ActionIcon
                 variant="subtle"
@@ -97,7 +105,7 @@ export function NotePopup({ x, y, content, onClose, onSave, onDelete }: NotePopu
                 }}
                 title="Delete note"
               >
-                <IconX size={18} />
+                <IconTrash size={18} />
               </ActionIcon>
             )}
             <ActionIcon
