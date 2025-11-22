@@ -1,16 +1,19 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import { Box, Flex, ActionIcon, Stack, Loader, Text } from '@mantine/core'
 import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react'
-import { addEdge, useNodesState, useEdgesState, Position, type Connection, type Node, type Edge, type OnSelectionChangeParams } from '@xyflow/react'
+import { addEdge, useNodesState, useEdgesState, Position, MarkerType, type Connection, type Node, type Edge, type OnSelectionChangeParams } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useProject } from '../hooks/useProject'
 import { useFiles } from '../hooks/useFiles'
 import { useHierarchy } from '../hooks/useHierarchy'
 import { useCanvas } from '../hooks/useCanvas'
+import { useNotes } from '../hooks/useNotes'
 import type { Tag } from '../types/firebase'
 import { Header } from './canvas/Header'
 import { HierarchySidebar } from './canvas/HierarchySidebar'
 import { CanvasArea } from './canvas/CanvasArea'
+import { NotesSidebar } from './canvas/NotesSidebar'
 
 interface CanvasPageProps {
   userId: string
@@ -19,7 +22,9 @@ interface CanvasPageProps {
 function CanvasPage({ userId }: CanvasPageProps) {
   // UI State
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
   const sidebarWidth = sidebarCollapsed ? 0 : 280
+  const rightSidebarWidth = rightSidebarCollapsed ? 0 : 420
 
   // Selection State
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
@@ -66,9 +71,24 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const [isTagPopupOpen, setIsTagPopupOpen] = useState(false)
   const [selectedTagsForNodes, setSelectedTagsForNodes] = useState<string[]>([])
 
+  // Notes System
+  const { 
+    notes, 
+    isLoading: notesLoading,
+    addNote: addNoteToDb, 
+    updateNoteContent: updateNoteInDb, 
+    deleteNote: deleteNoteFromDb 
+  } = useNotes(selectedFileId, selectedMainItemId, selectedSubItemId)
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
+  const [selectedNoteIdFromSidebar, setSelectedNoteIdFromSidebar] = useState<string | null>(null)
+
   // Get tags from selected file
   const selectedFile = files.find(f => f.id === selectedFileId)
   const fileTags = selectedFile?.data.tags || []
+
+  // Get current main item to find variation index
+  const currentMainItem = mainItems.find(m => m.id === selectedMainItemId)
+  const variationIndex = currentMainItem?.subItems.findIndex(s => s.id === selectedSubItemId) ?? -1
 
   // Initialize tags for files that don't have them
   useEffect(() => {
@@ -285,7 +305,8 @@ function CanvasPage({ userId }: CanvasPageProps) {
       const newEdge = {
         ...params,
         sourceHandle: params.sourceHandle || 'right-source', // Default to right if not specified
-        targetHandle: params.targetHandle || 'left-target'   // Default to left if not specified
+        targetHandle: params.targetHandle || 'left-target',   // Default to left if not specified
+        markerEnd: { type: MarkerType.ArrowClosed } // Add arrow head by default
       }
       setEdges((eds) => addEdge(newEdge, eds))
     },
@@ -362,7 +383,8 @@ function CanvasPage({ userId }: CanvasPageProps) {
         source: sourceNodeId,
         target: newNodeId,
         sourceHandle: `${handlePosition.toLowerCase()}-source`,
-        targetHandle: oppositeHandle[handlePosition]
+        targetHandle: oppositeHandle[handlePosition],
+        markerEnd: { type: MarkerType.ArrowClosed } // Add arrow head by default
       }
 
       // Add edge
@@ -779,6 +801,40 @@ function CanvasPage({ userId }: CanvasPageProps) {
     setEditingName('')
   }
 
+  // Notes handlers
+  const handleAddNote = useCallback(async (x: number, y: number) => {
+    console.log('handleAddNote called with:', { x, y })
+    const noteId = await addNoteToDb('', x, y)
+    if (noteId) {
+      setActiveNoteId(noteId)
+    }
+  }, [addNoteToDb])
+
+  const handleUpdateNote = useCallback(async (id: string, content: string) => {
+    await updateNoteInDb(id, content)
+  }, [updateNoteInDb])
+
+  const handleDeleteNote = useCallback(async (id: string) => {
+    await deleteNoteFromDb(id)
+    setActiveNoteId(null)
+  }, [deleteNoteFromDb])
+
+  const handleNoteClick = useCallback((id: string) => {
+    // Force immediate rendering of popup
+    flushSync(() => {
+      setActiveNoteId(id)
+    })
+  }, [])
+
+  const handleNoteClose = useCallback(() => {
+    setActiveNoteId(null)
+  }, [])
+
+  // Reset active note when variation changes
+  useEffect(() => {
+    setActiveNoteId(null)
+  }, [selectedSubItemId])
+
   // Show loading state
   if (projectLoading || filesLoading) {
     return (
@@ -915,8 +971,60 @@ function CanvasPage({ userId }: CanvasPageProps) {
             onRemoveTag={handleRemoveTag}
             colors={colors}
             updateNodeColor={updateNodeColor}
+            notes={notes}
+            onAddNote={handleAddNote}
+            onUpdateNote={handleUpdateNote}
+            onDeleteNote={handleDeleteNote}
+            activeNoteId={activeNoteId}
+            onNoteClick={handleNoteClick}
+            onNoteClose={handleNoteClose}
+            selectedNoteIdFromSidebar={selectedNoteIdFromSidebar}
+            onCanvasClick={() => setSelectedNoteIdFromSidebar(null)}
           />
         </Box>
+
+        {/* Right Sidebar - Notes */}
+        <Box
+          style={{
+            width: rightSidebarWidth,
+            height: '100%',
+            transition: 'width 0.3s ease',
+            overflow: 'hidden',
+            position: 'relative'
+          }}
+        >
+          <NotesSidebar 
+            isCollapsed={rightSidebarCollapsed} 
+            variationId={selectedSubItemId}
+            variationIndex={variationIndex}
+            mainItemSubItems={currentMainItem?.subItems}
+            notes={notes}
+            isLoading={notesLoading}
+            onDeleteNote={handleDeleteNote}
+            onNoteClick={setSelectedNoteIdFromSidebar}
+            selectedNoteId={selectedNoteIdFromSidebar}
+          />
+        </Box>
+
+        {/* Right Sidebar toggle button */}
+        <ActionIcon
+          size="md"
+          variant="subtle"
+          color="gray"
+          onClick={() => setRightSidebarCollapsed(!rightSidebarCollapsed)}
+          style={{
+            position: 'absolute',
+            right: rightSidebarCollapsed ? '8px' : `${rightSidebarWidth - 12}px`,
+            top: '16px',
+            transition: 'right 0.3s ease, background-color 0.3s ease, border-color 0.3s ease',
+            zIndex: 5,
+            backgroundColor: 'var(--bg-primary)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '4px'
+          }}
+        >
+          {rightSidebarCollapsed ? <IconChevronLeft size={18} /> : <IconChevronRight size={18} />}
+        </ActionIcon>
       </Flex>
     </Box>
   )

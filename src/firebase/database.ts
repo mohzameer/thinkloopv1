@@ -631,3 +631,114 @@ export const getReactFlowState = async (
   }
 }
 
+// ============================================================================
+// NOTES OPERATIONS (per sub-item/variation)
+// ============================================================================
+
+export interface Note {
+  id: string
+  content: string
+  x: number
+  y: number
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+/**
+ * Get all notes for a sub-item (variation)
+ */
+export const getSubItemNotes = async (
+  fileId: string,
+  mainItemId: string,
+  subItemId: string
+): Promise<Array<{ id: string; data: Note }>> => {
+  try {
+    const notesRef = collection(db, 'files', fileId, 'mainItems', mainItemId, 'subItems', subItemId, 'notes')
+    const q = query(notesRef, orderBy('createdAt', 'desc'))
+    const snapshot = await getDocs(q)
+
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      data: {
+        ...doc.data(),
+        id: doc.id
+      } as Note
+    }))
+  } catch (error) {
+    console.error('[Database] Error getting notes:', error)
+    throw error
+  }
+}
+
+/**
+ * Create a new note for a sub-item
+ */
+export const createNote = async (
+  fileId: string,
+  mainItemId: string,
+  subItemId: string,
+  content: string,
+  x: number,
+  y: number
+): Promise<string> => {
+  try {
+    const noteRef = doc(collection(db, 'files', fileId, 'mainItems', mainItemId, 'subItems', subItemId, 'notes'))
+    
+    await setDoc(noteRef, {
+      content,
+      x,
+      y,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    })
+
+    console.log('[Database] Note created:', noteRef.id)
+    return noteRef.id
+  } catch (error) {
+    console.error('[Database] Error creating note:', error)
+    throw error
+  }
+}
+
+/**
+ * Update a note's content
+ */
+export const updateNote = async (
+  fileId: string,
+  mainItemId: string,
+  subItemId: string,
+  noteId: string,
+  content: string
+): Promise<void> => {
+  try {
+    const noteRef = doc(db, 'files', fileId, 'mainItems', mainItemId, 'subItems', subItemId, 'notes', noteId)
+    await updateDoc(noteRef, {
+      content,
+      updatedAt: serverTimestamp()
+    })
+    console.log('[Database] Note updated:', noteId)
+  } catch (error) {
+    console.error('[Database] Error updating note:', error)
+    throw error
+  }
+}
+
+/**
+ * Delete a note
+ */
+export const deleteNote = async (
+  fileId: string,
+  mainItemId: string,
+  subItemId: string,
+  noteId: string
+): Promise<void> => {
+  try {
+    const noteRef = doc(db, 'files', fileId, 'mainItems', mainItemId, 'subItems', subItemId, 'notes', noteId)
+    await deleteDoc(noteRef)
+    console.log('[Database] Note deleted:', noteId)
+  } catch (error) {
+    console.error('[Database] Error deleting note:', error)
+    throw error
+  }
+}
+
