@@ -1,5 +1,5 @@
 import { Paper, Tooltip, ActionIcon } from '@mantine/core'
-import { IconHash } from '@tabler/icons-react'
+import { IconTag } from '@tabler/icons-react'
 import type { Node } from '@xyflow/react'
 
 interface ColorBarProps {
@@ -85,7 +85,7 @@ export const FloatingColorBar = ({
               transition: 'all 0.2s ease'
             }}
           >
-            <IconHash size={20} />
+            <IconTag size={20} />
           </ActionIcon>
         </Tooltip>
       </Paper>

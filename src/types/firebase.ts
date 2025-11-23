@@ -29,6 +29,8 @@ export interface FileDocument {
   userId: string
   name: string
   tags: Tag[]
+  lastViewedMainItemId?: string
+  lastViewedSubItemId?: string
   createdAt: Timestamp
   updatedAt: Timestamp
 }
@@ -96,9 +98,18 @@ export interface FirestorePaths {
   subItems: 'subItems'
 }
 
+// Conversation/Message types
+export interface Message {
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
 // Helper type for creating new documents (without timestamps)
 export type NewProject = Omit<Project, 'createdAt' | 'updatedAt'>
 export type NewFile = Omit<FileDocument, 'createdAt' | 'updatedAt'>
 export type NewMainItem = Omit<MainItem, 'createdAt' | 'updatedAt'>
 export type NewSubItem = Omit<SubItem, 'createdAt' | 'updatedAt'>
+export type NewMessage = Omit<Message, 'createdAt' | 'updatedAt'>
 

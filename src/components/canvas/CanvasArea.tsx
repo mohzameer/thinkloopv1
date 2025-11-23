@@ -1,6 +1,6 @@
 import { Box, Flex, Stack, Text, Loader, Paper, ActionIcon, Center } from '@mantine/core'
 import { ReactFlow, Background, Controls, MiniMap, BackgroundVariant, MarkerType, type Node, type Edge, type OnNodesChange, type OnEdgesChange, type Connection, type OnSelectionChangeParams, type ReactFlowInstance } from '@xyflow/react'
-import { IconSquare, IconCircle, IconFileText, IconMessageCircle } from '@tabler/icons-react'
+import { IconSquare, IconCircle, IconFileText, IconMessageCircle, IconTrash } from '@tabler/icons-react'
 import { NoteDot } from './NoteDot'
 import { NotePopup } from './NotePopup'
 import { useCallback, useRef, useState, useEffect, useMemo } from 'react'
@@ -31,6 +31,7 @@ interface CanvasAreaProps {
   onNodeDoubleClick: (event: React.MouseEvent, node: Node) => void
   onEdgeDoubleClick: (event: React.MouseEvent, edge: Edge) => void
   onAddNode: (nodeType: 'rectangle' | 'circle') => void
+  onClearCanvas: () => void
   // Tag System
   isTagPopupOpen: boolean
   selectedTagsForNodes: string[]
@@ -68,6 +69,7 @@ export const CanvasArea = ({
   onNodeDoubleClick,
   onEdgeDoubleClick,
   onAddNode,
+  onClearCanvas,
   isTagPopupOpen,
   selectedTagsForNodes,
   fileTags,
@@ -456,6 +458,15 @@ export const CanvasArea = ({
           }}
         >
           <IconMessageCircle size={20} stroke={1.5} />
+        </ActionIcon>
+        <ActionIcon
+          size="lg"
+          variant="transparent"
+          onClick={onClearCanvas}
+          title="Clear Canvas"
+          style={{ color: 'var(--text-primary)' }}
+        >
+          <IconTrash size={20} stroke={1.5} />
         </ActionIcon>
       </Paper>
 

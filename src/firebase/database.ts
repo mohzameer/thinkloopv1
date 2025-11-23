@@ -23,7 +23,8 @@ import type {
   NewFile,
   NewMainItem,
   NewSubItem,
-  Tag
+  Tag,
+  Message
 } from '../types/firebase'
 
 // ============================================================================
@@ -226,6 +227,28 @@ export const updateFileTags = async (fileId: string, tags: Tag[]): Promise<void>
     console.log('[Database] File tags updated:', fileId)
   } catch (error) {
     console.error('[Database] Error updating file tags:', error)
+    throw error
+  }
+}
+
+/**
+ * Update a file's last viewed sub-item
+ */
+export const updateFileLastViewed = async (
+  fileId: string,
+  mainItemId: string,
+  subItemId: string
+): Promise<void> => {
+  try {
+    const fileRef = doc(db, 'files', fileId)
+    await updateDoc(fileRef, {
+      lastViewedMainItemId: mainItemId,
+      lastViewedSubItemId: subItemId,
+      updatedAt: serverTimestamp()
+    })
+    console.log('[Database] File last viewed updated:', fileId, { mainItemId, subItemId })
+  } catch (error) {
+    console.error('[Database] Error updating file last viewed:', error)
     throw error
   }
 }
@@ -573,6 +596,9 @@ export const duplicateSubItemAsMainItem = async (
       parentSubItemId: sourceSubItemId
     })
 
+    // Create welcome message for the new variation
+    await createWelcomeMessage(fileId, result.mainItemId, result.subItemId)
+
     console.log('[Database] Sub-item duplicated as main item:', result.mainItemId)
     return result
   } catch (error) {
@@ -605,6 +631,9 @@ export const branchSubItem = async (
       sourceSubItem.data.reactFlowState,
       sourceSubItemId
     )
+
+    // Create welcome message for the new variation
+    await createWelcomeMessage(fileId, mainItemId, newSubItemId)
 
     console.log('[Database] Sub-item branched:', newSubItemId)
     return newSubItemId
@@ -738,6 +767,124 @@ export const deleteNote = async (
     console.log('[Database] Note deleted:', noteId)
   } catch (error) {
     console.error('[Database] Error deleting note:', error)
+    throw error
+  }
+}
+
+// ============================================================================
+// CONVERSATION/MESSAGE OPERATIONS (per sub-item/variation)
+// ============================================================================
+
+/**
+ * Get all messages for a sub-item (variation)
+ */
+export const getSubItemMessages = async (
+  fileId: string,
+  mainItemId: string,
+  subItemId: string
+): Promise<Array<{ id: string; data: Message }>> => {
+  try {
+    const messagesRef = collection(db, 'files', fileId, 'mainItems', mainItemId, 'subItems', subItemId, 'messages')
+    const q = query(messagesRef, orderBy('createdAt', 'asc'))
+    const snapshot = await getDocs(q)
+
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      data: {
+        ...doc.data(),
+        id: doc.id
+      } as Message
+    }))
+  } catch (error) {
+    console.error('[Database] Error getting messages:', error)
+    throw error
+  }
+}
+
+/**
+ * Create a new message for a sub-item
+ */
+export const createMessage = async (
+  fileId: string,
+  mainItemId: string,
+  subItemId: string,
+  role: 'user' | 'assistant',
+  content: string
+): Promise<string> => {
+  try {
+    const messageRef = doc(collection(db, 'files', fileId, 'mainItems', mainItemId, 'subItems', subItemId, 'messages'))
+    
+    await setDoc(messageRef, {
+      role,
+      content,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    })
+
+    console.log('[Database] Message created:', messageRef.id)
+    return messageRef.id
+  } catch (error) {
+    console.error('[Database] Error creating message:', error)
+    throw error
+  }
+}
+
+/**
+ * Create the initial welcome message for a new variation
+ */
+const createWelcomeMessage = async (
+  fileId: string,
+  mainItemId: string,
+  subItemId: string
+): Promise<void> => {
+  try {
+    const welcomeMessage = "Hey! Ready to dive into your new idea? I can help you tweak the drawings, dig deep into what you've got here, or run some quick simulations to see how things play out. What's on your mind?"
+    await createMessage(fileId, mainItemId, subItemId, 'assistant', welcomeMessage)
+    console.log('[Database] Welcome message created for variation:', subItemId)
+  } catch (error) {
+    console.error('[Database] Error creating welcome message:', error)
+    // Don't throw - welcome message failure shouldn't break variation creation
+  }
+}
+
+/**
+ * Update a message's content
+ */
+export const updateMessage = async (
+  fileId: string,
+  mainItemId: string,
+  subItemId: string,
+  messageId: string,
+  content: string
+): Promise<void> => {
+  try {
+    const messageRef = doc(db, 'files', fileId, 'mainItems', mainItemId, 'subItems', subItemId, 'messages', messageId)
+    await updateDoc(messageRef, {
+      content,
+      updatedAt: serverTimestamp()
+    })
+    console.log('[Database] Message updated:', messageId)
+  } catch (error) {
+    console.error('[Database] Error updating message:', error)
+    throw error
+  }
+}
+
+/**
+ * Delete a message
+ */
+export const deleteMessage = async (
+  fileId: string,
+  mainItemId: string,
+  subItemId: string,
+  messageId: string
+): Promise<void> => {
+  try {
+    const messageRef = doc(db, 'files', fileId, 'mainItems', mainItemId, 'subItems', subItemId, 'messages', messageId)
+    await deleteDoc(messageRef)
+    console.log('[Database] Message deleted:', messageId)
+  } catch (error) {
+    console.error('[Database] Error deleting message:', error)
     throw error
   }
 }

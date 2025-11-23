@@ -9,11 +9,16 @@ import { useFiles } from '../hooks/useFiles'
 import { useHierarchy } from '../hooks/useHierarchy'
 import { useCanvas } from '../hooks/useCanvas'
 import { useNotes } from '../hooks/useNotes'
+import { useChat, type AIResponseData } from '../hooks/useChat'
 import type { Tag } from '../types/firebase'
+import { generateNodesAndEdges } from '../services/ai/nodeGenerator'
+import { isAddResponse } from '../services/ai/responseParser'
+import { createMessage as createMessageInDb, updateFileLastViewed } from '../firebase/database'
 import { Header } from './canvas/Header'
 import { HierarchySidebar } from './canvas/HierarchySidebar'
 import { CanvasArea } from './canvas/CanvasArea'
 import { NotesSidebar } from './canvas/NotesSidebar'
+import { FileExplorerModal } from './canvas/FileExplorerModal'
 
 interface CanvasPageProps {
   userId: string
@@ -36,6 +41,11 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const [editingSubItemId, setEditingSubItemId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
 
+  // File Explorer Modal State
+  const [fileExplorerOpened, setFileExplorerOpened] = useState(false)
+  const [editingFileId, setEditingFileId] = useState<string | null>(null)
+  const [editingFileName, setEditingFileName] = useState('')
+
   // Node Editing State
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
 
@@ -48,7 +58,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
   // Firebase Hooks
   const { project, isLoading: projectLoading } = useProject(userId)
-  const { files, isLoading: filesLoading, updateTags: updateFileTagsLocal } = useFiles(project?.id || null, userId)
+  const { files, isLoading: filesLoading, updateTags: updateFileTagsLocal, createFile, renameFile, deleteFile } = useFiles(project?.id || null, userId)
   const { mainItems, isLoading: hierarchyLoading, branchVariation, promoteToMain, deleteSubItem, deleteMainItem, renameMainItem, renameSubItem } = useHierarchy(selectedFileId)
   const {
     canvasState,
@@ -72,15 +82,33 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const [selectedTagsForNodes, setSelectedTagsForNodes] = useState<string[]>([])
 
   // Notes System
-  const { 
-    notes, 
+  const {
+    notes,
     isLoading: notesLoading,
-    addNote: addNoteToDb, 
-    updateNoteContent: updateNoteInDb, 
-    deleteNote: deleteNoteFromDb 
+    addNote: addNoteToDb,
+    updateNoteContent: updateNoteInDb,
+    deleteNote: deleteNoteFromDb
   } = useNotes(selectedFileId, selectedMainItemId, selectedSubItemId)
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
   const [selectedNoteIdFromSidebar, setSelectedNoteIdFromSidebar] = useState<string | null>(null)
+
+  // Chat System
+  const {
+    messages,
+    isLoading: messagesLoading,
+    isAIProcessing,
+    contextWarning,
+    clarificationState,
+    sendMessage: sendChatMessage,
+    answerClarification,
+    cancelClarification,
+    refresh: refreshMessages
+  } = useChat(selectedFileId, selectedMainItemId, selectedSubItemId, {
+    nodes,
+    edges,
+    selectedNodeIds: selectedNodes.map(n => n.id),
+    enableAI: true
+  })
 
   // Get tags from selected file
   const selectedFile = files.find(f => f.id === selectedFileId)
@@ -131,6 +159,13 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const currentCanvasKey = useRef<string | null>(null)
   // Track previous selection to detect changes
   const previousSelectionRef = useRef<string>('')
+  // Store updateCanvas in ref to avoid dependency issues
+  const updateCanvasRef = useRef(updateCanvas)
+
+  // Update ref when updateCanvas changes
+  useEffect(() => {
+    updateCanvasRef.current = updateCanvas
+  }, [updateCanvas])
 
   // Close tag popup when selection changes
   useEffect(() => {
@@ -151,7 +186,26 @@ function CanvasPage({ userId }: CanvasPageProps) {
     }
   }, [files, selectedFileId])
 
-  // Auto-select first main item and default sub-item when hierarchy loads
+  // Track previous file ID to detect file changes
+  const previousFileIdRef = useRef<string | null>(null)
+
+  // Clear selection when switching files to allow auto-select logic to load last viewed sub-item
+  useEffect(() => {
+    // Only clear if file actually changed (not on initial load)
+    if (selectedFileId && previousFileIdRef.current !== null && previousFileIdRef.current !== selectedFileId) {
+      console.log('[CanvasPage] File changed, clearing selection to load last viewed:', {
+        previousFile: previousFileIdRef.current,
+        newFile: selectedFileId
+      })
+      // Clear current selection when file changes to trigger auto-select with last viewed
+      setSelectedMainItemId(null)
+      setSelectedSubItemId(null)
+    }
+    previousFileIdRef.current = selectedFileId
+  }, [selectedFileId])
+
+  // Auto-select main item and sub-item when hierarchy loads
+  // Prioritizes last viewed sub-item, falls back to first main item's default sub-item
   useEffect(() => {
     console.log('[CanvasPage] Auto-select check:', {
       selectedFileId,
@@ -165,8 +219,31 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
     // Only auto-select if we have a file selected, hierarchy has loaded, and no main item is selected
     if (selectedFileId && mainItems.length > 0 && !selectedMainItemId && !hierarchyLoading) {
+      const selectedFile = files.find(f => f.id === selectedFileId)
+      const lastViewedMainItemId = selectedFile?.data.lastViewedMainItemId
+      const lastViewedSubItemId = selectedFile?.data.lastViewedSubItemId
+
+      // Try to load last viewed sub-item if it exists and is valid
+      if (lastViewedMainItemId && lastViewedSubItemId) {
+        const lastViewedMainItem = mainItems.find(m => m.id === lastViewedMainItemId)
+        if (lastViewedMainItem) {
+          const lastViewedSubItem = lastViewedMainItem.subItems.find(s => s.id === lastViewedSubItemId)
+          if (lastViewedSubItem) {
+            console.log('[CanvasPage] Loading last viewed sub-item:', {
+              fileId: selectedFileId,
+              mainItemId: lastViewedMainItemId,
+              subItemId: lastViewedSubItemId
+            })
+            setSelectedMainItemId(lastViewedMainItemId)
+            setSelectedSubItemId(lastViewedSubItemId)
+            return
+          }
+        }
+      }
+
+      // Fall back to first main item's default sub-item
       const firstMainItem = mainItems[0]
-      console.log('[CanvasPage] Auto-selecting first main item:', {
+      console.log('[CanvasPage] Auto-selecting first main item (no last viewed found):', {
         fileId: selectedFileId,
         mainItemId: firstMainItem.id,
         subItemId: firstMainItem.data.defaultSubItemId,
@@ -182,9 +259,20 @@ function CanvasPage({ userId }: CanvasPageProps) {
         const firstMainItem = mainItems[0]
         setSelectedMainItemId(firstMainItem.id)
         setSelectedSubItemId(firstMainItem.data.defaultSubItemId)
+      } else {
+        // Check if the selected sub-item still exists
+        const mainItem = mainItems.find(m => m.id === selectedMainItemId)
+        if (mainItem && selectedSubItemId) {
+          const subItemExists = mainItem.subItems.find(s => s.id === selectedSubItemId)
+          if (!subItemExists) {
+            // Sub-item was deleted, fall back to default
+            console.log('[CanvasPage] Selected sub-item no longer exists, falling back to default')
+            setSelectedSubItemId(mainItem.data.defaultSubItemId)
+          }
+        }
       }
     }
-  }, [mainItems, selectedMainItemId, selectedFileId, hierarchyLoading])
+  }, [mainItems, selectedMainItemId, selectedSubItemId, selectedFileId, hierarchyLoading, files])
 
   // Load canvas state into React Flow (only on initial load or file/item change)
   useEffect(() => {
@@ -246,15 +334,18 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
     // Verify we're saving to the correct canvas
     const expectedCanvasKey = `${selectedFileId}-${selectedMainItemId}-${selectedSubItemId}`
-    if (currentCanvasKey.current !== expectedCanvasKey) {
-      console.log('[CanvasPage] Skipping save: canvas key mismatch', {
+
+    // If we have a current canvas key and it doesn't match, we're switching - don't save to old location
+    if (currentCanvasKey.current && currentCanvasKey.current !== expectedCanvasKey) {
+      console.log('[CanvasPage] Skipping save: canvas key mismatch (switching canvases)', {
         current: currentCanvasKey.current,
         expected: expectedCanvasKey
       })
       return
     }
 
-    // Verify that the loaded canvas state matches what we're about to save
+    // Only save if the canvas has been loaded for this key
+    // This ensures we don't save before the canvas state has been loaded from the database
     if (lastLoadedCanvasState.current !== expectedCanvasKey) {
       console.log('[CanvasPage] Skipping save: canvas not yet loaded for this key', {
         lastLoaded: lastLoadedCanvasState.current,
@@ -263,41 +354,120 @@ function CanvasPage({ userId }: CanvasPageProps) {
       return
     }
 
-    // Skip if no nodes (empty canvas on first load)
-    if (nodes.length === 0 && edges.length === 0) {
-      console.log('[CanvasPage] Skipping save: empty canvas')
-      return
+    // Ensure currentCanvasKey is set (should be set by load effect, but set it here as fallback)
+    if (!currentCanvasKey.current) {
+      currentCanvasKey.current = expectedCanvasKey
     }
 
     console.log('[CanvasPage] Canvas changed, scheduling auto-save for:', expectedCanvasKey, 'with', nodes.length, 'nodes,', edges.length, 'edges')
 
-    // Strip out functions from node data before saving to Firebase
-    const sanitizedNodes = nodes.map(node => ({
-      ...node,
-      data: {
-        label: node.data.label,
-        categories: node.data.categories,
-        borderColor: node.data.borderColor,
-        tags: node.data.tags
-        // Exclude: isEditing, onLabelChange, onEditingComplete, onAddConnectedNode
+    // Helper function to recursively remove undefined values from an object
+    const removeUndefined = (obj: any): any => {
+      if (obj === null) {
+        return null
       }
-    }))
+      if (Array.isArray(obj)) {
+        return obj.map(removeUndefined).filter(item => item !== undefined)
+      }
+      if (typeof obj === 'object') {
+        const cleaned: any = {}
+        for (const key in obj) {
+          if (obj[key] !== undefined) {
+            const cleanedValue = removeUndefined(obj[key])
+            if (cleanedValue !== undefined) {
+              cleaned[key] = cleanedValue
+            }
+          }
+        }
+        return cleaned
+      }
+      return obj
+    }
 
-    // Strip out functions from edge data before saving
-    const sanitizedEdges = edges.map(edge => ({
-      ...edge,
-      data: edge.data ? {
-        label: edge.data.label
-        // Exclude: isEditing, onLabelChange, onEditingComplete
-      } : undefined
-    }))
+    // Strip out functions and undefined values from node data before saving to Firebase
+    const sanitizedNodes = nodes.map(node => {
+      const nodeData: any = {}
+      if (node.data.label !== undefined) nodeData.label = node.data.label
+      if (node.data.categories !== undefined && node.data.categories !== null) {
+        nodeData.categories = Array.isArray(node.data.categories) ? node.data.categories : []
+      }
+      if (node.data.borderColor !== undefined) nodeData.borderColor = node.data.borderColor
+      if (node.data.tags !== undefined && node.data.tags !== null) {
+        nodeData.tags = Array.isArray(node.data.tags) ? node.data.tags : []
+      }
+      // Exclude: isEditing, onLabelChange, onEditingComplete, onAddConnectedNode
 
-    updateCanvas({
+      return removeUndefined({
+        id: node.id,
+        type: node.type,
+        position: node.position,
+        data: Object.keys(nodeData).length > 0 ? nodeData : {},
+        selected: node.selected,
+        dragging: node.dragging,
+        width: node.width,
+        height: node.height,
+        style: node.style,
+        className: node.className,
+        sourcePosition: node.sourcePosition,
+        targetPosition: node.targetPosition,
+        hidden: node.hidden,
+        draggable: node.draggable,
+        selectable: node.selectable,
+        connectable: node.connectable,
+        deletable: node.deletable,
+        focusable: node.focusable,
+        parentId: node.parentId,
+        zIndex: node.zIndex,
+        extent: node.extent,
+        expandParent: node.expandParent,
+        measured: node.measured
+      })
+    })
+
+    // Strip out functions and undefined values from edge data before saving
+    const sanitizedEdges = edges.map(edge => {
+      const edgeData: any = {}
+      if (edge.data?.label !== undefined) edgeData.label = edge.data.label
+
+      const edgeObj: any = {
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
+        type: edge.type,
+        animated: edge.animated,
+        hidden: edge.hidden,
+        deletable: edge.deletable,
+        focusable: edge.focusable,
+        selectable: edge.selectable,
+        markerStart: edge.markerStart,
+        markerEnd: edge.markerEnd,
+        label: edge.label,
+        labelStyle: edge.labelStyle,
+        labelShowBg: edge.labelShowBg,
+        labelBgStyle: edge.labelBgStyle,
+        labelBgPadding: edge.labelBgPadding,
+        labelBgBorderRadius: edge.labelBgBorderRadius,
+        style: edge.style,
+        className: edge.className,
+        zIndex: edge.zIndex
+      }
+
+      // Only include data if it has content
+      if (Object.keys(edgeData).length > 0) {
+        edgeObj.data = edgeData
+      }
+
+      return removeUndefined(edgeObj)
+    })
+
+    updateCanvasRef.current({
       nodes: sanitizedNodes as any,
       edges: sanitizedEdges as any,
       viewport: { x: 0, y: 0, zoom: 1 }
     })
-  }, [nodes, edges, selectedFileId, selectedMainItemId, selectedSubItemId, updateCanvas])
+  }, [nodes, edges, selectedFileId, selectedMainItemId, selectedSubItemId])
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -326,6 +496,12 @@ function CanvasPage({ userId }: CanvasPageProps) {
     setNodes((nds) => [...nds, newNode])
     setNodeIdCounter((id) => id + 1)
   }, [nodeIdCounter, setNodes])
+
+  const clearCanvas = useCallback(() => {
+    setNodes([])
+    setEdges([])
+    setNodeIdCounter(1)
+  }, [setNodes, setEdges])
 
   // Add connected node from an unconnected handle
   const addConnectedNode = useCallback((sourceNodeId: string, handlePosition: Position, nodeType: string) => {
@@ -599,7 +775,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
 
 
-  const handleSubItemSelect = (mainItemId: string, subItemId: string) => {
+  const handleSubItemSelect = async (mainItemId: string, subItemId: string) => {
     console.log('[CanvasPage] Selecting sub-item:', { mainItemId, subItemId })
     // Immediately mark as loading to prevent saves during transition
     isLoadingCanvas.current = true
@@ -607,6 +783,17 @@ function CanvasPage({ userId }: CanvasPageProps) {
     currentCanvasKey.current = null
     setSelectedMainItemId(mainItemId)
     setSelectedSubItemId(subItemId)
+
+    // Save the last viewed sub-item for this file
+    if (selectedFileId) {
+      try {
+        await updateFileLastViewed(selectedFileId, mainItemId, subItemId)
+        console.log('[CanvasPage] Saved last viewed sub-item for file:', selectedFileId)
+      } catch (error) {
+        console.error('[CanvasPage] Error saving last viewed sub-item:', error)
+        // Don't block the selection if save fails
+      }
+    }
   }
 
   const handleDuplicateSubItem = async (mainItemId: string, subItemId: string) => {
@@ -830,10 +1017,160 @@ function CanvasPage({ userId }: CanvasPageProps) {
     setActiveNoteId(null)
   }, [])
 
+  // Handle sending chat message with AI response processing
+  const handleSendMessage = useCallback(async (content: string) => {
+    const result = await sendChatMessage(content)
+
+    // Handle AI response if present
+    if (result.aiResponse && isAddResponse(result.aiResponse.response)) {
+      await handleAddResponse(result.aiResponse)
+    }
+
+    return result.messageId
+  }, [sendChatMessage])
+
+  // Handle ADD response (extracted for reuse)
+  const handleAddResponse = useCallback(async (aiResponse: AIResponseData) => {
+    try {
+      // Type guard: ensure it's an ADD response
+      if (!isAddResponse(aiResponse.response)) {
+        console.warn('[CanvasPage] Response is not an ADD response')
+        return
+      }
+
+      // Validate response has nodes
+      if (!aiResponse.response.nodes || !Array.isArray(aiResponse.response.nodes) || aiResponse.response.nodes.length === 0) {
+        console.warn('[CanvasPage] No nodes to add from AI response')
+        return
+      }
+
+      // Generate nodes and edges from AI response
+      const generateResult = generateNodesAndEdges(
+        aiResponse.response.nodes,
+        aiResponse.response.edges || [],
+        {
+          existingNodes: nodes,
+          existingEdges: edges,
+          nodeIdCounter
+        }
+      )
+
+      // Add generated nodes to canvas
+      if (generateResult.nodes.length > 0) {
+        setNodes((nds) => [...nds, ...generateResult.nodes])
+        setNodeIdCounter(generateResult.nextNodeIdCounter)
+      }
+
+      // Add generated edges to canvas
+      if (generateResult.edges.length > 0) {
+        setEdges((eds) => [...eds, ...generateResult.edges])
+      }
+
+      // Show warnings if any
+      if (generateResult.warnings.length > 0) {
+        console.warn('[CanvasPage] Node generation warnings:', generateResult.warnings)
+      }
+
+      // Show errors if any
+      if (generateResult.errors.length > 0) {
+        console.error('[CanvasPage] Node generation errors:', generateResult.errors)
+      }
+
+      // Save assistant message with explanation (without triggering AI)
+      if (aiResponse.response.explanation && selectedFileId && selectedMainItemId && selectedSubItemId) {
+        try {
+          await createMessageInDb(
+            selectedFileId,
+            selectedMainItemId,
+            selectedSubItemId,
+            'assistant',
+            aiResponse.response.explanation
+          )
+          // Reload messages to show the new one
+          await refreshMessages()
+        } catch (error) {
+          console.error('[CanvasPage] Error saving AI explanation:', error)
+        }
+      }
+    } catch (error: any) {
+      console.error('[CanvasPage] Error processing AI ADD response:', error)
+      // Save error message directly (without triggering AI)
+      if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+        try {
+          await createMessageInDb(
+            selectedFileId,
+            selectedMainItemId,
+            selectedSubItemId,
+            'assistant',
+            `Error adding nodes: ${error.message || 'Unknown error'}`
+          )
+          await refreshMessages()
+        } catch (saveError) {
+          console.error('[CanvasPage] Error saving error message:', saveError)
+        }
+      }
+    }
+  }, [nodes, edges, nodeIdCounter, setNodes, setEdges, setNodeIdCounter, selectedFileId, selectedMainItemId, selectedSubItemId, refreshMessages])
+
+  // Handle clarification answer
+  const handleAnswerClarification = useCallback(async (questionIndex: number, answer: string) => {
+    const aiResponse = await answerClarification(questionIndex, answer)
+    if (aiResponse && isAddResponse(aiResponse.response)) {
+      await handleAddResponse(aiResponse)
+    }
+  }, [answerClarification, handleAddResponse])
+
   // Reset active note when variation changes
   useEffect(() => {
     setActiveNoteId(null)
   }, [selectedSubItemId])
+
+  // File operation handlers
+  const handleCreateFile = useCallback(async () => {
+    const fileId = await createFile('Untitled')
+    if (fileId) {
+      setSelectedFileId(fileId)
+      setFileExplorerOpened(false)
+    }
+  }, [createFile])
+
+  const handleFileSelect = useCallback((fileId: string) => {
+    setSelectedFileId(fileId)
+    setFileExplorerOpened(false)
+  }, [])
+
+  const handleFileDoubleClick = useCallback((fileId: string, currentName: string) => {
+    setEditingFileId(fileId)
+    setEditingFileName(currentName)
+  }, [])
+
+  const handleSaveFileName = useCallback(async (fileId: string) => {
+    if (editingFileName.trim()) {
+      await renameFile(fileId, editingFileName.trim())
+    }
+    setEditingFileId(null)
+    setEditingFileName('')
+  }, [editingFileName, renameFile])
+
+  const handleCancelFileEdit = useCallback(() => {
+    setEditingFileId(null)
+    setEditingFileName('')
+  }, [])
+
+  const handleDeleteFile = useCallback(async (fileId: string) => {
+    if (confirm('Are you sure you want to delete this file? This action cannot be undone.')) {
+      const success = await deleteFile(fileId)
+      if (success && selectedFileId === fileId) {
+        // If we deleted the currently selected file, select another one or clear selection
+        const remainingFiles = files.filter(f => f.id !== fileId)
+        if (remainingFiles.length > 0) {
+          setSelectedFileId(remainingFiles[0].id)
+        } else {
+          setSelectedFileId(null)
+        }
+      }
+    }
+  }, [deleteFile, selectedFileId, files])
 
   // Show loading state
   if (projectLoading || filesLoading) {
@@ -871,7 +1208,11 @@ function CanvasPage({ userId }: CanvasPageProps) {
       }}
     >
       {/* Header Bar */}
-      <Header selectedFile={selectedFile} isSaving={isSaving} />
+      <Header
+        selectedFile={selectedFile}
+        isSaving={isSaving}
+        onOpenFileExplorer={() => setFileExplorerOpened(true)}
+      />
 
       {/* Main content area with sidebar */}
       <Flex style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
@@ -958,6 +1299,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
               setEditingEdgeId(edge.id)
             }}
             onAddNode={addNode}
+            onClearCanvas={clearCanvas}
             isTagPopupOpen={isTagPopupOpen}
             selectedTagsForNodes={selectedTagsForNodes}
             fileTags={fileTags}
@@ -993,8 +1335,8 @@ function CanvasPage({ userId }: CanvasPageProps) {
             position: 'relative'
           }}
         >
-          <NotesSidebar 
-            isCollapsed={rightSidebarCollapsed} 
+          <NotesSidebar
+            isCollapsed={rightSidebarCollapsed}
             variationId={selectedSubItemId}
             variationIndex={variationIndex}
             mainItemSubItems={currentMainItem?.subItems}
@@ -1003,6 +1345,14 @@ function CanvasPage({ userId }: CanvasPageProps) {
             onDeleteNote={handleDeleteNote}
             onNoteClick={setSelectedNoteIdFromSidebar}
             selectedNoteId={selectedNoteIdFromSidebar}
+            messages={messages}
+            isLoadingMessages={messagesLoading}
+            isAIProcessing={isAIProcessing}
+            contextWarning={contextWarning}
+            clarificationState={clarificationState}
+            onSendMessage={handleSendMessage}
+            onAnswerClarification={handleAnswerClarification}
+            onCancelClarification={cancelClarification}
           />
         </Box>
 
@@ -1026,6 +1376,24 @@ function CanvasPage({ userId }: CanvasPageProps) {
           {rightSidebarCollapsed ? <IconChevronLeft size={18} /> : <IconChevronRight size={18} />}
         </ActionIcon>
       </Flex>
+
+      {/* File Explorer Modal */}
+      <FileExplorerModal
+        opened={fileExplorerOpened}
+        onClose={() => setFileExplorerOpened(false)}
+        files={files}
+        filesLoading={filesLoading}
+        selectedFileId={selectedFileId}
+        editingFileId={editingFileId}
+        editingName={editingFileName}
+        onCreateFile={handleCreateFile}
+        onFileSelect={handleFileSelect}
+        onFileDoubleClick={handleFileDoubleClick}
+        onDeleteFile={handleDeleteFile}
+        onEditingNameChange={setEditingFileName}
+        onSaveFileName={handleSaveFileName}
+        onCancelEdit={handleCancelFileEdit}
+      />
     </Box>
   )
 }

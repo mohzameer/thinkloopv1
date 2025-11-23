@@ -1,5 +1,5 @@
 import { Flex, Text, ActionIcon, Loader, Group } from '@mantine/core'
-import { IconUser, IconMoon, IconSun } from '@tabler/icons-react'
+import { IconUser, IconMoon, IconSun, IconFolder } from '@tabler/icons-react'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useState } from 'react'
 import { AuthModal } from '../AuthModal'
@@ -14,9 +14,10 @@ interface FileItem {
 interface HeaderProps {
   selectedFile: FileItem | undefined
   isSaving: boolean
+  onOpenFileExplorer: () => void
 }
 
-export const Header = ({ selectedFile, isSaving }: HeaderProps) => {
+export const Header = ({ selectedFile, isSaving, onOpenFileExplorer }: HeaderProps) => {
   const { theme, toggleTheme } = useTheme()
   const [authModalOpened, setAuthModalOpened] = useState(false)
 
@@ -67,8 +68,17 @@ export const Header = ({ selectedFile, isSaving }: HeaderProps) => {
         )}
       </Flex>
 
-      {/* Right: Theme Toggle & User Button */}
+      {/* Right: File Explorer, Theme Toggle & User Button */}
       <Group gap="xs" style={{ flex: '0 0 auto' }}>
+        <ActionIcon
+          size="lg"
+          variant="subtle"
+          color="gray"
+          onClick={onOpenFileExplorer}
+          title="Open File Explorer"
+        >
+          <IconFolder size={24} />
+        </ActionIcon>
         <ActionIcon
           size="lg"
           variant="subtle"
