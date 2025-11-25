@@ -36,13 +36,13 @@ export function createAIError(
 ): AIError {
   const errorMap: Record<ErrorCode, { message: string; userMessage: string; retryable: boolean }> = {
     API_KEY_MISSING: {
-      message: 'Anthropic API key is missing',
-      userMessage: 'API key not configured. Please add VITE_ANTHROPIC_API_KEY to your .env.local file.',
+      message: 'Backend API key is missing',
+      userMessage: 'Backend API key not configured. Please check backend server configuration.',
       retryable: false
     },
     API_KEY_INVALID: {
-      message: 'Invalid Anthropic API key',
-      userMessage: 'Invalid API key. Please check your VITE_ANTHROPIC_API_KEY in .env.local.',
+      message: 'Invalid backend API key',
+      userMessage: 'Backend authentication failed. Please check backend API key configuration.',
       retryable: false
     },
     API_RATE_LIMIT: {
@@ -151,4 +151,6 @@ export function isRetryableError(error: AIError): boolean {
 export function formatErrorForLogging(error: AIError): string {
   return `[${error.code}] ${error.message}${error.details ? ` - ${JSON.stringify(error.details)}` : ''}`
 }
+
+
 

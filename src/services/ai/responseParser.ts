@@ -8,11 +8,11 @@
 export type NodeType = 'rectangle' | 'circle' | 'diamond' | 'triangle'
 
 export interface NodeData {
-  label: string
-  type: NodeType
+  label: string // Required - label text for the node
+  type?: NodeType
   position?: { x: number; y: number }
   positionRelative?: { relativeTo: string; offset: { x: number; y: number } }
-  tags?: string[]
+  tags?: string[] // Optional - tags/categories are not added to nodes (user adds manually)
 }
 
 export interface EdgeData {
@@ -67,7 +67,7 @@ function validateNodeData(node: any): NodeData | null {
     return null
   }
 
-  // Required fields
+  // Label is required for node creation
   if (!node.label || typeof node.label !== 'string') {
     return null
   }
@@ -115,8 +115,8 @@ function validateNodeData(node: any): NodeData | null {
     label: node.label.trim(),
     type,
     ...(position && { position }),
-    ...(positionRelative && { positionRelative }),
-    ...(tags && tags.length > 0 && { tags })
+    ...(positionRelative && { positionRelative })
+    // Tags/categories are intentionally omitted - user adds them manually
   }
 }
 

@@ -1,33 +1,35 @@
 /**
- * Claude API Service
+ * AI Service
  * 
- * Handles communication with Claude Sonnet 4.5 API
- * Uses fetch API (can be upgraded to @anthropic-ai/sdk later if needed)
+ * Provider-agnostic AI API service
+ * Backend handles routing to different providers (Anthropic, OpenAI, DeepSeek, etc.)
  */
 
-export interface ClaudeMessage {
+export interface AIMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
 }
 
-export interface ClaudeRequestOptions {
+export interface AIRequestOptions {
   system?: string
-  messages: ClaudeMessage[]
+  messages: AIMessage[]
   maxTokens?: number
   temperature?: number
   model?: string
+  provider?: string // Optional: hint for backend provider selection
 }
 
-export interface ClaudeResponse {
+export interface AIResponse {
   content: string
   usage?: {
     inputTokens: number
     outputTokens: number
   }
   error?: string
+  provider?: string // Optional: which provider was used
 }
 
-export interface ClaudeError {
+export interface AIError {
   type: 'api_error' | 'network_error' | 'timeout' | 'invalid_key' | 'rate_limit' | 'unknown'
   message: string
   statusCode?: number
@@ -35,21 +37,37 @@ export interface ClaudeError {
 }
 
 // API Configuration
-// Backend API URL - backend handles CORS and API key authentication
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL 
-  ? `${import.meta.env.VITE_BACKEND_URL}/api/anthropic`
-  : 'http://localhost:3001/api/anthropic'
+// Backend API URL - backend handles CORS, API key authentication, and provider routing
+function getApiBaseUrl(): string {
+  const backendUrl = import.meta.env.VITE_BACKEND_URL
+
+  if (!backendUrl) {
+    // Default to localhost:3001 for development
+    return 'http://localhost:3001/api/ai'
+  }
+
+  // Handle cases where URL might already include /api/ai or have trailing slash
+  const cleanUrl = backendUrl.trim().replace(/\/+$/, '') // Remove trailing slashes
+
+  // If URL already includes /api/ai, use it as-is
+  if (cleanUrl.includes('/api/ai')) {
+    return cleanUrl
+  }
+
+  // Otherwise append /api/ai
+  return `${cleanUrl}/api/ai`
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 // Model abstraction: Default model can be configured via env var, allowing backend to control model selection
-// Frontend can still pass model in request, but backend can override if needed
+// Backend can route to different providers based on model name or configuration
 const DEFAULT_MODEL = import.meta.env.VITE_AI_MODEL || 'claude-sonnet-4-5-20250929'
 const DEFAULT_MAX_TOKENS = 4096
 const DEFAULT_TEMPERATURE = 0.7
 const REQUEST_TIMEOUT = 60000 // 60 seconds
 const MAX_RETRIES = 3
 const RETRY_DELAY_BASE = 1000 // 1 second base delay
-
-// API key is handled by backend - no longer needed in frontend
 
 /**
  * Calculate exponential backoff delay
@@ -61,21 +79,21 @@ function getRetryDelay(attempt: number): number {
 /**
  * Check if error is retryable
  */
-function isRetryableError(error: ClaudeError): boolean {
-  return error.retryable && (
+function isRetryableError(error: AIError): boolean {
+  return Boolean(error.retryable && (
     error.type === 'network_error' ||
     error.type === 'timeout' ||
     error.type === 'rate_limit' ||
     (error.type === 'api_error' && error.statusCode && error.statusCode >= 500)
-  )
+  ))
 }
 
 /**
  * Parse API error response
  */
-function parseError(error: any, statusCode?: number): ClaudeError {
+function parseError(error: any, statusCode?: number): AIError {
   if (error.type) {
-    return error as ClaudeError
+    return error as AIError
   }
 
   // Network/timeout errors
@@ -133,33 +151,34 @@ function parseError(error: any, statusCode?: number): ClaudeError {
 }
 
 /**
- * Send message to Claude API with retry logic
+ * Send message to AI API with retry logic
+ * Provider-agnostic: backend handles routing to appropriate provider
  */
 export async function sendMessage(
-  options: ClaudeRequestOptions
-): Promise<ClaudeResponse> {
+  options: AIRequestOptions
+): Promise<AIResponse> {
   // Model abstraction: Use provided model, fallback to env-configured default, or hardcoded default
-  // Backend can override this by not passing model in request, allowing backend to control model selection
+  // Backend can override this and route to different providers based on model name or configuration
   const model = options.model || DEFAULT_MODEL
   const maxTokens = options.maxTokens || DEFAULT_MAX_TOKENS
   const temperature = options.temperature ?? DEFAULT_TEMPERATURE
 
-  // Prepare messages (system message is separate in Anthropic API)
-  const messages = options.messages.filter(msg => msg.role !== 'system')
-  const systemMessage = options.messages.find(msg => msg.role === 'system')?.content || options.system
+  // Prepare messages - backend handles provider-specific formatting
+  const messages = options.messages.map(msg => ({
+    role: msg.role,
+    content: msg.content
+  }))
 
   const requestBody = {
     model,
     max_tokens: maxTokens,
     temperature,
-    messages: messages.map(msg => ({
-      role: msg.role === 'system' ? 'user' : msg.role, // Anthropic doesn't support system role in messages array
-      content: msg.content
-    })),
-    ...(systemMessage && { system: systemMessage })
+    messages,
+    ...(options.system && { system: options.system }),
+    ...(options.provider && { provider: options.provider }) // Optional provider hint
   }
 
-  let lastError: ClaudeError | null = null
+  let lastError: AIError | null = null
 
   // Retry loop
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -168,28 +187,53 @@ export async function sendMessage(
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
 
-      const response = await fetch(`${API_BASE_URL}/messages`, {
+      const url = `${API_BASE_URL}/messages`
+
+      // Debug logging in development
+      if (import.meta.env.DEV) {
+        console.log('[AI Service] Sending request to:', url)
+        console.log('[AI Service] Request body:', { ...requestBody, messages: `[${requestBody.messages.length} messages]` })
+      }
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
-          // API key and anthropic-version are handled by backend
+          // API keys and provider-specific headers are handled by backend
         },
         body: JSON.stringify(requestBody),
         signal: controller.signal
       })
 
+      if (import.meta.env.DEV) {
+        console.log('[AI Service] Response status:', response.status, response.statusText)
+      }
+
       clearTimeout(timeoutId)
+
+      if (import.meta.env.DEV) {
+        console.log('[AI Service] Response status:', response.status, response.statusText)
+      }
 
       // Handle non-OK responses
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
+
+        if (import.meta.env.DEV) {
+          console.error('[AI Service] Error response:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorData
+          })
+        }
+
         const error = parseError(errorData, response.status)
-        
+
         // If not retryable or last attempt, throw
         if (!isRetryableError(error) || attempt === MAX_RETRIES) {
           throw error
         }
-        
+
         lastError = error
         // Wait before retry
         await new Promise(resolve => setTimeout(resolve, getRetryDelay(attempt)))
@@ -198,9 +242,18 @@ export async function sendMessage(
 
       // Parse successful response
       const data = await response.json()
-      
-      // Backend returns content as a string (already extracted from Anthropic response)
-      // Format: { content: string, usage?: { inputTokens: number, outputTokens: number } }
+
+      if (import.meta.env.DEV) {
+        console.log('[AI Service] Response data:', {
+          hasContent: !!data.content,
+          contentLength: data.content?.length || 0,
+          provider: data.provider,
+          usage: data.usage
+        })
+      }
+
+      // Backend returns standardized response format regardless of provider
+      // Format: { content: string, usage?: { inputTokens: number, outputTokens: number }, provider?: string }
       const content = data.content || ''
 
       return {
@@ -208,21 +261,22 @@ export async function sendMessage(
         usage: data.usage ? {
           inputTokens: data.usage.inputTokens || 0,
           outputTokens: data.usage.outputTokens || 0
-        } : undefined
+        } : undefined,
+        provider: data.provider // Optional: which provider was used
       }
 
     } catch (error: any) {
-      const claudeError = parseError(error)
-      
+      const aiError = parseError(error)
+
       // If not retryable or last attempt, throw
-      if (!isRetryableError(claudeError) || attempt === MAX_RETRIES) {
+      if (!isRetryableError(aiError) || attempt === MAX_RETRIES) {
         return {
           content: '',
-          error: claudeError.message
+          error: aiError.message
         }
       }
-      
-      lastError = claudeError
+
+      lastError = aiError
       // Wait before retry
       await new Promise(resolve => setTimeout(resolve, getRetryDelay(attempt)))
     }
@@ -231,7 +285,7 @@ export async function sendMessage(
   // If we get here, all retries failed
   return {
     content: '',
-    error: lastError?.message || 'Failed to get response from Claude API'
+    error: lastError?.message || 'Failed to get response from AI API'
   }
 }
 
@@ -251,4 +305,10 @@ export async function validateBackendConnection(): Promise<boolean> {
     return false
   }
 }
+
+// Re-export types for backward compatibility (if needed during migration)
+export type ClaudeMessage = AIMessage
+export type ClaudeRequestOptions = AIRequestOptions
+export type ClaudeResponse = AIResponse
+export type ClaudeError = AIError
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Box, Stack, Text, ScrollArea, Paper, Badge, Flex, ActionIcon, Tabs, Textarea, Loader, Alert, Progress, Collapse } from '@mantine/core'
 import { IconNote, IconCheck, IconRobot, IconMessageCircle, IconSend, IconAlertCircle, IconInfoCircle, IconAlertTriangle, IconChevronDown, IconChevronUp } from '@tabler/icons-react'
+import ReactMarkdown from 'react-markdown'
 import type { ChatMessage, ClarificationState } from '../../hooks/useChat'
 import type { ContextWarning } from '../../services/ai/contextManager'
 
@@ -58,12 +59,12 @@ export function NotesSidebar({
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive or AI processing state changes
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [messages])
+  }, [messages, isAIProcessing])
 
   if (isCollapsed) {
     return null
@@ -397,21 +398,13 @@ export function NotesSidebar({
                 <Flex justify="center" align="center" py="xl">
                   <Loader size="sm" />
                 </Flex>
-              ) : isAIProcessing ? (
-                <Paper p="md" withBorder style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
-                  <Flex align="center" gap="xs">
-                    <Loader size="sm" />
-                    <Text size="sm" style={{ color: 'var(--text-primary)' }}>
-                      AI is thinking...
-                    </Text>
-                  </Flex>
-                </Paper>
-              ) : messages.length === 0 ? (
+              ) : messages.length === 0 && !isAIProcessing ? (
                 <Text size="sm" c="dimmed" ta="center" py="xl">
                   No messages yet. Start a conversation with the AI assistant.
                 </Text>
               ) : (
-                messages.map((message) => (
+                <>
+                  {messages.map((message) => (
                   <Paper
                     key={message.id}
                     p="md"
@@ -433,17 +426,116 @@ export function NotesSidebar({
                         {message.role === 'assistant' ? 'AI Assistant' : 'You'}
                       </Text>
                     </Flex>
-                    <Text 
-                      size="sm" 
-                      style={{ 
-                        color: 'var(--text-primary)', 
-                        whiteSpace: 'pre-wrap', 
-                        wordBreak: 'break-word',
-                        fontWeight: 400
+                    <Box
+                      style={{
+                        color: 'var(--text-primary)',
+                        fontSize: '14px',
+                        lineHeight: 1.6
                       }}
                     >
-                      {message.content}
-                    </Text>
+                      <ReactMarkdown
+                        components={{
+                          // Style headings
+                          h1: ({node, ...props}) => <Text size="lg" fw={700} mb="sm" mt="md" style={{ color: 'var(--text-primary)' }} {...props} />,
+                          h2: ({node, ...props}) => <Text size="md" fw={700} mb="xs" mt="md" style={{ color: 'var(--text-primary)' }} {...props} />,
+                          h3: ({node, ...props}) => <Text size="sm" fw={700} mb="xs" mt="sm" style={{ color: 'var(--text-primary)' }} {...props} />,
+                          h4: ({node, ...props}) => <Text size="sm" fw={600} mb="xs" mt="xs" style={{ color: 'var(--text-primary)' }} {...props} />,
+                          // Style paragraphs
+                          p: ({node, ...props}) => <Text size="sm" mb="sm" style={{ color: 'var(--text-primary)', lineHeight: 1.6 }} {...props} />,
+                          // Style lists
+                          ul: ({node, ...props}) => <Box component="ul" mb="sm" style={{ paddingLeft: '24px', marginTop: '4px', marginBottom: '8px' }} {...props} />,
+                          ol: ({node, ...props}) => <Box component="ol" mb="sm" style={{ paddingLeft: '24px', marginTop: '4px', marginBottom: '8px' }} {...props} />,
+                          li: ({node, ...props}) => <Text size="sm" component="li" mb="xs" style={{ color: 'var(--text-primary)', lineHeight: 1.6 }} {...props} />,
+                          // Style code blocks
+                          code: ({node, inline, ...props}: any) => 
+                            inline ? (
+                              <Text 
+                                component="code" 
+                                size="sm" 
+                                style={{ 
+                                  backgroundColor: 'var(--bg-secondary)', 
+                                  padding: '2px 6px', 
+                                  borderRadius: '4px',
+                                  fontFamily: 'monospace',
+                                  fontSize: '13px'
+                                }} 
+                                {...props} 
+                              />
+                            ) : (
+                              <Box
+                                component="pre"
+                                style={{
+                                  backgroundColor: 'var(--bg-secondary)',
+                                  padding: '12px',
+                                  borderRadius: '6px',
+                                  overflow: 'auto',
+                                  marginTop: '8px',
+                                  marginBottom: '8px'
+                                }}
+                              >
+                                <Text
+                                  component="code"
+                                  size="xs"
+                                  style={{
+                                    fontFamily: 'monospace',
+                                    color: 'var(--text-primary)',
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-word'
+                                  }}
+                                  {...props}
+                                />
+                              </Box>
+                            ),
+                          // Style blockquotes
+                          blockquote: ({node, ...props}) => (
+                            <Box
+                              component="blockquote"
+                              style={{
+                                borderLeft: '3px solid var(--border-color)',
+                                paddingLeft: '12px',
+                                marginLeft: 0,
+                                marginTop: '8px',
+                                marginBottom: '8px',
+                                fontStyle: 'italic',
+                                color: 'var(--text-secondary)'
+                              }}
+                              {...props}
+                            />
+                          ),
+                          // Style links
+                          a: ({node, ...props}: any) => (
+                            <Text
+                              component="a"
+                              size="sm"
+                              style={{
+                                color: 'var(--primary-color, #228be6)',
+                                textDecoration: 'underline',
+                                cursor: 'pointer'
+                              }}
+                              {...props}
+                            />
+                          ),
+                          // Style strong/bold
+                          strong: ({node, ...props}) => <Text component="strong" fw={700} style={{ color: 'var(--text-primary)' }} {...props} />,
+                          // Style emphasis/italic
+                          em: ({node, ...props}) => <Text component="em" fs="italic" style={{ color: 'var(--text-primary)' }} {...props} />,
+                          // Style horizontal rule
+                          hr: ({node, ...props}) => (
+                            <Box
+                              component="hr"
+                              style={{
+                                border: 'none',
+                                borderTop: '1px solid var(--border-color)',
+                                margin: '16px 0'
+                              }}
+                              {...props}
+                            />
+                          )
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </Box>
                     <Text 
                       size="xs" 
                       c="dimmed"
@@ -454,7 +546,27 @@ export function NotesSidebar({
                       {message.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </Text>
                   </Paper>
-                ))
+                  ))}
+                  {isAIProcessing && (
+                    <Paper 
+                      p="md" 
+                      withBorder 
+                      style={{ 
+                        backgroundColor: 'var(--bg-secondary)', 
+                        borderColor: 'var(--border-color)',
+                        alignSelf: 'flex-start',
+                        maxWidth: '85%'
+                      }}
+                    >
+                      <Flex align="center" gap="xs">
+                        <Loader size="sm" />
+                        <Text size="sm" style={{ color: 'var(--text-primary)' }}>
+                          AI is thinking...
+                        </Text>
+                      </Flex>
+                    </Paper>
+                  )}
+                </>
               )}
               <div ref={messagesEndRef} />
             </Stack>

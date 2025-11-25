@@ -7,7 +7,7 @@ import {
 } from '../firebase/database'
 import type { Timestamp } from 'firebase/firestore'
 import type { Node, Edge } from '@xyflow/react'
-import { sendMessage as sendClaudeMessage } from '../services/ai/claudeService'
+import { sendMessage as sendAIMessage } from '../services/ai/aiService'
 import { buildPrompt } from '../services/ai/promptBuilder'
 import { parseAIResponse, isAddResponse, isAnswerResponse, isClarifyResponse, isErrorResponse } from '../services/ai/responseParser'
 import { classifyIntent } from '../services/ai/intentClassifier'
@@ -145,8 +145,17 @@ export const useChat = (
       // Save user message to database
       const messageId = await createMessageInDb(fileId, mainItemId, subItemId, 'user', content.trim())
       
-      // Reload messages to get the new one with proper timestamps
-      await loadMessages()
+      // Optimistically add user message to UI (don't reload yet to avoid resetting screen)
+      setMessages(prev => [...prev, {
+        id: messageId || `temp-${Date.now()}`,
+        role: 'user',
+        content: content.trim(),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }])
+      
+      // Reload messages in background to get proper timestamps (but don't wait)
+      loadMessages().catch(err => console.error('[useChat] Error reloading messages:', err))
 
       // Generate AI response if enabled
       let aiResponse: AIResponseData | undefined
@@ -198,7 +207,7 @@ export const useChat = (
           })
 
           // Call Claude API
-          const claudeResponse = await sendClaudeMessage({
+          const claudeResponse = await sendAIMessage({
             system: systemPrompt,
             messages: promptMessages,
             maxTokens: 4096,
@@ -224,7 +233,7 @@ export const useChat = (
             }
           } else if (isAnswerResponse(parsedResponse)) {
             // Save as assistant message
-            await createMessageInDb(
+            const assistantMessageId = await createMessageInDb(
               fileId,
               mainItemId,
               subItemId,
@@ -232,8 +241,17 @@ export const useChat = (
               parsedResponse.response
             )
             
-            // Reload messages
-            await loadMessages()
+            // Optimistically add assistant message to UI (replaces loading state)
+            setMessages(prev => [...prev, {
+              id: assistantMessageId || `temp-${Date.now()}`,
+              role: 'assistant',
+              content: parsedResponse.response,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            }])
+            
+            // Reload messages in background to get proper timestamps
+            loadMessages().catch(err => console.error('[useChat] Error reloading messages:', err))
           } else if (isClarifyResponse(parsedResponse)) {
             // Set clarification state
             setClarificationState({
@@ -246,7 +264,7 @@ export const useChat = (
             })
 
             // Save clarification message
-            await createMessageInDb(
+            const clarificationMessageId = await createMessageInDb(
               fileId,
               mainItemId,
               subItemId,
@@ -254,11 +272,20 @@ export const useChat = (
               `I need some clarification:\n\n${parsedResponse.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\n${parsedResponse.context}`
             )
             
-            // Reload messages
-            await loadMessages()
+            // Optimistically add clarification message to UI
+            setMessages(prev => [...prev, {
+              id: clarificationMessageId || `temp-${Date.now()}`,
+              role: 'assistant',
+              content: `I need some clarification:\n\n${parsedResponse.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\n${parsedResponse.context}`,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            }])
+            
+            // Reload messages in background
+            loadMessages().catch(err => console.error('[useChat] Error reloading messages:', err))
           } else if (isErrorResponse(parsedResponse)) {
             // Save error as assistant message
-            await createMessageInDb(
+            const errorMessageId = await createMessageInDb(
               fileId,
               mainItemId,
               subItemId,
@@ -266,8 +293,19 @@ export const useChat = (
               `I encountered an error: ${parsedResponse.message}`
             )
             
-            await loadMessages()
+            // Optimistically add error message to UI
+            setMessages(prev => [...prev, {
+              id: errorMessageId || `temp-${Date.now()}`,
+              role: 'assistant',
+              content: `I encountered an error: ${parsedResponse.message}`,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            }])
+            
             setError(parsedResponse.message)
+            
+            // Reload messages in background
+            loadMessages().catch(err => console.error('[useChat] Error reloading messages:', err))
           }
 
         } catch (aiError: any) {
@@ -286,14 +324,25 @@ export const useChat = (
           
           // Save error message with user-friendly text
           try {
-            await createMessageInDb(
+            const errorMessageId = await createMessageInDb(
               fileId,
               mainItemId,
               subItemId,
               'assistant',
               `I'm sorry, I encountered an error: ${errorMessage}. Please try again or rephrase your request.`
             )
-            await loadMessages()
+            
+            // Optimistically add error message to UI
+            setMessages(prev => [...prev, {
+              id: errorMessageId || `temp-${Date.now()}`,
+              role: 'assistant',
+              content: `I'm sorry, I encountered an error: ${errorMessage}. Please try again or rephrase your request.`,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            }])
+            
+            // Reload messages in background
+            loadMessages().catch(err => console.error('[useChat] Error reloading messages:', err))
           } catch (saveError) {
             console.error('[useChat] Error saving error message:', saveError)
           }

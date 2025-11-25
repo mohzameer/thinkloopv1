@@ -5,7 +5,10 @@
  * conversation history, and intent-specific instructions
  */
 
-import type { ClaudeMessage } from './claudeService'
+import type { AIMessage } from './aiService'
+
+// Backward compatibility
+type ClaudeMessage = AIMessage
 
 export type Intent = 
   | 'ADD_NODES'
@@ -50,10 +53,10 @@ For ADD operations: Return JSON with this structure:
   "action": "add",
   "nodes": [
     {
-      "label": "Node label",
+      "label": "Node label text (will be displayed on the node)",
       "type": "rectangle" | "circle" | "diamond" | "triangle",
-      "position": {"x": 100, "y": 200} OR "positionRelative": {"relativeTo": "node_id", "offset": {"x": 150, "y": 0}},
-      "tags": ["tag1", "tag2"]
+      "position": {"x": 100, "y": 200} OR "positionRelative": {"relativeTo": "node_id", "offset": {"x": 150, "y": 0}}
+      // Note: Do NOT include "tags" - categories/tags are added manually by users
     }
   ],
   "edges": [
@@ -81,11 +84,13 @@ For CLARIFICATION: Return questions:
 
 IMPORTANT:
 - Always return valid JSON
-- **Pay close attention to node label text** - it contains the actual content and context for each node
-- **Pay close attention to edge labels** - they describe the relationships and connections between nodes
-- Use the full text from node labels to understand what each node represents
-- Use edge labels to understand how nodes relate to each other
-- For node references, use node IDs when possible, or node labels if ID is unknown
+- **When READING the diagram**: Pay close attention to node label text - it contains the actual content and context for each node
+- **When READING the diagram**: Pay close attention to edge labels - they describe the relationships and connections between nodes
+- **When CREATING nodes**: Include the "label" field - it will be displayed on the node
+- **When CREATING nodes**: Do NOT include "tags" or "categories" - these are added manually by users
+- **When READING**: Use the full text from node labels to understand what each node represents
+- **When READING**: Use edge labels to understand how nodes relate to each other
+- For node references in edges, use node IDs when possible, or node labels if ID is unknown
 - When adding nodes, consider the existing structure and relationships based on node content and edge labels
 - Position nodes intelligently (avoid overlaps, maintain visual hierarchy)
 - If unsure about placement or relationships, ask for clarification`
@@ -103,6 +108,8 @@ function getIntentInstructions(intent: Intent): string {
 - Analyze the user's request carefully in context of existing node content
 - Identify which nodes to add and how they relate to existing nodes based on their content
 - Determine appropriate node types (rectangle for concepts, circle for entities, etc.)
+- **When creating nodes**: Include the "label" field - it will be displayed on the node
+- **When creating nodes**: Do NOT include "tags" or "categories" - these are added manually by users
 - When creating edges, use descriptive labels that explain the relationship
 - Consider the semantic meaning from node labels when positioning and connecting
 - Calculate positions relative to existing nodes or use smart defaults
@@ -113,6 +120,8 @@ function getIntentInstructions(intent: Intent): string {
       return `\nCURRENT TASK: Answering questions about relationships.
 - **Read the full text from node labels** to understand what each node represents
 - **Read edge labels carefully** - they describe the relationships between nodes
+- **When creating nodes**: Include the label field - it will be displayed on the node
+- **When creating nodes**: Do NOT include tags/categories - these are added manually by users
 - Analyze the canvas structure to understand connections
 - Use graph analysis data (central nodes, clusters, paths) to provide insights
 - Trace paths between nodes if needed (shortest path, all paths)

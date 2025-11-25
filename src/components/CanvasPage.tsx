@@ -56,6 +56,9 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const [isOperationInProgress, setIsOperationInProgress] = useState(false)
   const [operationMessage, setOperationMessage] = useState('')
 
+  // Pending AI drawing state
+  const [pendingAIDrawing, setPendingAIDrawing] = useState<AIResponseData | null>(null)
+
   // Firebase Hooks
   const { project, isLoading: projectLoading } = useProject(userId)
   const { files, isLoading: filesLoading, updateTags: updateFileTagsLocal, createFile, renameFile, deleteFile } = useFiles(project?.id || null, userId)
@@ -75,7 +78,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [nodeIdCounter, setNodeIdCounter] = useState(1)
   const [selectedNodes, setSelectedNodes] = useState<Node[]>([])
-  const [_selectedEdges, setSelectedEdges] = useState<Edge[]>([])
+  const [selectedEdges, setSelectedEdges] = useState<Edge[]>([])
 
   // Tag System State
   const [isTagPopupOpen, setIsTagPopupOpen] = useState(false)
@@ -578,6 +581,35 @@ function CanvasPage({ userId }: CanvasPageProps) {
     setSelectedEdges(params.edges)
   }, [])
 
+  // Delete selected edges
+  const deleteSelectedEdges = useCallback(() => {
+    if (selectedEdges.length === 0) return
+    
+    const edgeIdsToDelete = selectedEdges.map(edge => edge.id)
+    setEdges((eds) => eds.filter(edge => !edgeIdsToDelete.includes(edge.id)))
+    setSelectedEdges([])
+  }, [selectedEdges, setEdges])
+
+  // Handle keyboard shortcuts for deleting edges
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only handle Delete/Backspace if no input is focused
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      // Delete selected edges with Delete or Backspace
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedEdges.length > 0) {
+        event.preventDefault()
+        event.stopPropagation()
+        deleteSelectedEdges()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true) // Use capture phase
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [selectedEdges, deleteSelectedEdges])
+
   // Update node color
   const updateNodeColor = useCallback((color: string) => {
     if (selectedNodes.length === 0) return
@@ -763,6 +795,8 @@ function CanvasPage({ userId }: CanvasPageProps) {
     setEdges((eds) =>
       eds.map((edge) => ({
         ...edge,
+        selectable: true, // Ensure all edges are selectable
+        deletable: true, // Ensure all edges are deletable
         data: {
           ...edge.data,
           isEditing: editingEdgeId === edge.id,
@@ -1017,20 +1051,8 @@ function CanvasPage({ userId }: CanvasPageProps) {
     setActiveNoteId(null)
   }, [])
 
-  // Handle sending chat message with AI response processing
-  const handleSendMessage = useCallback(async (content: string) => {
-    const result = await sendChatMessage(content)
-
-    // Handle AI response if present
-    if (result.aiResponse && isAddResponse(result.aiResponse.response)) {
-      await handleAddResponse(result.aiResponse)
-    }
-
-    return result.messageId
-  }, [sendChatMessage])
-
-  // Handle ADD response (extracted for reuse)
-  const handleAddResponse = useCallback(async (aiResponse: AIResponseData) => {
+  // Execute AI drawing (actually add nodes/edges to canvas)
+  const executeAIDrawing = useCallback(async (aiResponse: AIResponseData) => {
     try {
       // Type guard: ensure it's an ADD response
       if (!isAddResponse(aiResponse.response)) {
@@ -1076,24 +1098,25 @@ function CanvasPage({ userId }: CanvasPageProps) {
         console.error('[CanvasPage] Node generation errors:', generateResult.errors)
       }
 
-      // Save assistant message with explanation (without triggering AI)
-      if (aiResponse.response.explanation && selectedFileId && selectedMainItemId && selectedSubItemId) {
+      // Save assistant message confirming the drawing
+      if (selectedFileId && selectedMainItemId && selectedSubItemId) {
         try {
+          const confirmationMessage = aiResponse.response.explanation || 
+            `Added ${generateResult.nodes.length} node(s)${generateResult.edges.length > 0 ? ` and ${generateResult.edges.length} edge(s)` : ''} to the canvas.`
           await createMessageInDb(
             selectedFileId,
             selectedMainItemId,
             selectedSubItemId,
             'assistant',
-            aiResponse.response.explanation
+            confirmationMessage
           )
-          // Reload messages to show the new one
           await refreshMessages()
         } catch (error) {
-          console.error('[CanvasPage] Error saving AI explanation:', error)
+          console.error('[CanvasPage] Error saving confirmation message:', error)
         }
       }
     } catch (error: any) {
-      console.error('[CanvasPage] Error processing AI ADD response:', error)
+      console.error('[CanvasPage] Error executing AI drawing:', error)
       // Save error message directly (without triggering AI)
       if (selectedFileId && selectedMainItemId && selectedSubItemId) {
         try {
@@ -1112,6 +1135,115 @@ function CanvasPage({ userId }: CanvasPageProps) {
     }
   }, [nodes, edges, nodeIdCounter, setNodes, setEdges, setNodeIdCounter, selectedFileId, selectedMainItemId, selectedSubItemId, refreshMessages])
 
+  // Handle ADD response - ask for permission instead of immediately drawing
+  const handleAddResponse = useCallback(async (aiResponse: AIResponseData) => {
+    try {
+      // Type guard: ensure it's an ADD response
+      if (!isAddResponse(aiResponse.response)) {
+        console.warn('[CanvasPage] Response is not an ADD response')
+        return
+      }
+
+      // Validate response has nodes
+      if (!aiResponse.response.nodes || !Array.isArray(aiResponse.response.nodes) || aiResponse.response.nodes.length === 0) {
+        console.warn('[CanvasPage] No nodes to add from AI response')
+        return
+      }
+
+      // Store pending drawing
+      setPendingAIDrawing(aiResponse)
+
+      // Build permission request message
+      const nodeLabels = aiResponse.response.nodes.map(n => n.label).filter(Boolean)
+      const nodeCount = aiResponse.response.nodes.length
+      const edgeCount = aiResponse.response.edges?.length || 0
+      
+      let permissionMessage = `I can add ${nodeCount} node(s)`
+      if (nodeLabels.length > 0 && nodeLabels.length <= 5) {
+        permissionMessage += `: ${nodeLabels.join(', ')}`
+      } else if (nodeLabels.length > 5) {
+        permissionMessage += `: ${nodeLabels.slice(0, 5).join(', ')} and ${nodeLabels.length - 5} more`
+      }
+      if (edgeCount > 0) {
+        permissionMessage += ` and ${edgeCount} edge(s)`
+      }
+      permissionMessage += ` to the canvas.\n\nWould you like me to proceed? (Reply "yes" to confirm or "no" to cancel)`
+
+      // Save permission request message (without triggering AI)
+      if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+        try {
+          await createMessageInDb(
+            selectedFileId,
+            selectedMainItemId,
+            selectedSubItemId,
+            'assistant',
+            permissionMessage
+          )
+          await refreshMessages()
+        } catch (error) {
+          console.error('[CanvasPage] Error saving permission request:', error)
+        }
+      }
+    } catch (error: any) {
+      console.error('[CanvasPage] Error processing AI ADD response:', error)
+      // Save error message directly (without triggering AI)
+      if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+        try {
+          await createMessageInDb(
+            selectedFileId,
+            selectedMainItemId,
+            selectedSubItemId,
+            'assistant',
+            `Error processing request: ${error.message || 'Unknown error'}`
+          )
+          await refreshMessages()
+        } catch (saveError) {
+          console.error('[CanvasPage] Error saving error message:', saveError)
+        }
+      }
+    }
+  }, [selectedFileId, selectedMainItemId, selectedSubItemId, refreshMessages])
+
+  // Handle sending chat message with AI response processing
+  const handleSendMessage = useCallback(async (content: string) => {
+    // Check if user is confirming a pending drawing
+    const isConfirmation = /^(yes|yep|yeah|ok|okay|proceed|go ahead|do it|confirm|approved?)$/i.test(content.trim())
+    
+    if (isConfirmation && pendingAIDrawing) {
+      // User confirmed, proceed with drawing
+      await executeAIDrawing(pendingAIDrawing)
+      setPendingAIDrawing(null)
+      return null
+    }
+
+    // Check if user is rejecting
+    const isRejection = /^(no|nope|nah|cancel|stop|don't|dont)$/i.test(content.trim())
+    if (isRejection && pendingAIDrawing) {
+      // User rejected, clear pending drawing
+      if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+        await createMessageInDb(
+          selectedFileId,
+          selectedMainItemId,
+          selectedSubItemId,
+          'assistant',
+          'Understood. I won\'t add those nodes. How else can I help?'
+        )
+        await refreshMessages()
+      }
+      setPendingAIDrawing(null)
+      return null
+    }
+
+    const result = await sendChatMessage(content)
+
+    // Handle AI response if present
+    if (result.aiResponse && isAddResponse(result.aiResponse.response)) {
+      await handleAddResponse(result.aiResponse)
+    }
+
+    return result.messageId
+  }, [sendChatMessage, pendingAIDrawing, executeAIDrawing, handleAddResponse, selectedFileId, selectedMainItemId, selectedSubItemId, refreshMessages])
+
   // Handle clarification answer
   const handleAnswerClarification = useCallback(async (questionIndex: number, answer: string) => {
     const aiResponse = await answerClarification(questionIndex, answer)
@@ -1119,6 +1251,11 @@ function CanvasPage({ userId }: CanvasPageProps) {
       await handleAddResponse(aiResponse)
     }
   }, [answerClarification, handleAddResponse])
+
+  // Clear pending drawing when switching contexts
+  useEffect(() => {
+    setPendingAIDrawing(null)
+  }, [selectedFileId, selectedMainItemId, selectedSubItemId])
 
   // Reset active note when variation changes
   useEffect(() => {

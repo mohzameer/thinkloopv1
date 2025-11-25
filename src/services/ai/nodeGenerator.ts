@@ -443,6 +443,7 @@ export function generateNodes(
   errors: string[]
   warnings: string[]
   labelToIdMap: Map<string, string>
+  newNodeIdMap: Map<string, string> // Map of new node IDs to their label identifiers (for edge references)
 } {
   const {
     existingNodes,
@@ -486,10 +487,13 @@ export function generateNodes(
   // First pass: create all nodes
   let gridIndex = 0
   for (const nodeData of nodeDataArray) {
+    // Label is required for node creation
     if (!nodeData.label || nodeData.label.trim().length === 0) {
       errors.push('Node missing label, skipping')
       continue
     }
+    
+    const nodeLabel = nodeData.label.trim()
 
     // Generate unique ID
     const nodeId = `${currentIdCounter}`
@@ -520,37 +524,38 @@ export function generateNodes(
     }
 
     // Check for position conflicts and adjust if needed
-    if (hasPositionConflict(position, existingNodes, nodes, nodeData.label)) {
+    if (hasPositionConflict(position, existingNodes, nodes, nodeLabel)) {
       position = adjustPositionForConflict(
         position,
         existingNodes,
         nodes,
-        nodeData.label,
+        nodeLabel,
         20,
         options.canvasBounds
       )
-      warnings.push(`Adjusted position for node "${nodeData.label}" to avoid overlap`)
+      warnings.push(`Adjusted position for node to avoid overlap`)
     }
     
     // Ensure position is within canvas bounds
     if (options.canvasBounds && !isWithinCanvasBounds(position, options.canvasBounds)) {
       position = clampToCanvasBounds(position, options.canvasBounds)
-      warnings.push(`Clamped position for node "${nodeData.label}" to canvas bounds`)
+      warnings.push(`Clamped position for node to canvas bounds`)
     }
 
-    // Create node
+    // Create node WITH label, but WITHOUT categories/tags
     const node: Node = {
       id: nodeId,
       type: nodeData.type || 'rectangle',
       data: {
-        label: nodeData.label.trim(),
-        ...(nodeData.tags && nodeData.tags.length > 0 && { categories: nodeData.tags })
+        label: nodeLabel.trim() // Set the label on the node
+        // Categories/tags are intentionally omitted - user must add them manually if needed
       },
       position
     }
 
     nodes.push(node)
-    newNodeIdMap.set(nodeId, nodeData.label.trim().toLowerCase())
+    // Map label for edge references
+    newNodeIdMap.set(nodeId, nodeLabel.toLowerCase())
   }
 
   return {
@@ -558,7 +563,8 @@ export function generateNodes(
     nextNodeIdCounter: currentIdCounter,
     errors,
     warnings,
-    labelToIdMap
+    labelToIdMap,
+    newNodeIdMap // Return the mapping for edge generation
   }
 }
 
@@ -696,14 +702,8 @@ export function generateNodesAndEdges(
   // Generate nodes first
   const nodeResult = generateNodes(nodeDataArray, options)
 
-  // Create newNodeIdMap for edge generation
-  const newNodeIdMap = new Map<string, string>()
-  nodeResult.nodes.forEach(node => {
-    const label = ((node.data as any)?.label || '').toLowerCase()
-    if (label) {
-      newNodeIdMap.set(node.id, label)
-    }
-  })
+  // Use the newNodeIdMap returned from generateNodes (contains label->id mapping for new nodes)
+  // Note: Nodes don't have labels set, but we still have the label identifiers for edge references
 
   // Generate edges (using both existing and new nodes)
   const edgeResult = generateEdges(
@@ -712,7 +712,7 @@ export function generateNodesAndEdges(
     nodeResult.nodes,
     options.existingEdges,
     nodeResult.labelToIdMap,
-    newNodeIdMap
+    nodeResult.newNodeIdMap
   )
 
   return {

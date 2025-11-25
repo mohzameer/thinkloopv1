@@ -1,7 +1,10 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_ANTHROPIC_API_KEY: string
+  // Backend API URL (e.g., http://localhost:3001 or https://api.yourdomain.com)
+  readonly VITE_BACKEND_URL?: string
+  // Optional: Default AI model (backend can override)
+  readonly VITE_AI_MODEL?: string
   // Add other env variables here as needed
 }
 

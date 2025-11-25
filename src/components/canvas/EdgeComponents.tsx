@@ -20,7 +20,8 @@ export const EditableEdge = ({
   targetPosition,
   style = {},
   markerEnd,
-  data
+  data,
+  selected
 }: EdgeProps<EdgeData>) => {
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -32,6 +33,15 @@ export const EditableEdge = ({
   })
 
   const edgeData = data || {}
+  
+  // Use red color when selected, otherwise use style or default
+  const strokeColor = selected 
+    ? '#dc2626' // Red color for selected edges
+    : ((style as React.CSSProperties)?.stroke as string || '#b1b1b7')
+  
+  const strokeWidth = selected 
+    ? 3 // Thicker stroke when selected
+    : ((style as React.CSSProperties)?.strokeWidth as number || 2)
 
   return (
     <>
@@ -51,13 +61,25 @@ export const EditableEdge = ({
             `}
           </style>
         </defs>
+        {/* Invisible wider path for easier clicking - only when not selected to avoid interference */}
+        {!selected && (
+          <path
+            d={edgePath}
+            fill="none"
+            stroke="transparent"
+            strokeWidth={20}
+            style={{ cursor: 'pointer', pointerEvents: 'all' }}
+          />
+        )}
+        {/* Visible edge path */}
         <path
           d={edgePath}
           fill="none"
-          stroke={(style as React.CSSProperties)?.stroke as string || '#b1b1b7'}
-          strokeWidth={(style as React.CSSProperties)?.strokeWidth as number || 1}
+          stroke={strokeColor}
+          strokeWidth={strokeWidth}
           markerEnd={markerEnd}
           className="animated-dotted-edge"
+          style={{ cursor: 'pointer', pointerEvents: selected ? 'all' : 'none' }}
         />
       </g>
       <EdgeLabelRenderer>
