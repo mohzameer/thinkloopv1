@@ -506,6 +506,24 @@ function CanvasPage({ userId }: CanvasPageProps) {
     setNodeIdCounter(1)
   }, [setNodes, setEdges])
 
+  // Helper function to get node dimensions
+  const getNodeDimensions = useCallback((nodeType: string, label?: string): { width: number; height: number } => {
+    switch (nodeType) {
+      case 'circle':
+        return { width: 100, height: 100 }
+      case 'rectangle':
+        // Estimate width based on label length (rough estimate: 8px per character + padding)
+        const estimatedWidth = label ? Math.max(80, label.length * 8 + 40) : 100
+        return { width: estimatedWidth, height: 40 } // Height is padding 10px top + 10px bottom + ~20px for text
+      case 'diamond':
+        return { width: 100, height: 100 }
+      case 'triangle':
+        return { width: 100, height: 100 }
+      default:
+        return { width: 100, height: 100 }
+    }
+  }, [])
+
   // Add connected node from an unconnected handle
   const addConnectedNode = useCallback((sourceNodeId: string, handlePosition: Position, nodeType: string) => {
     // Create a label based on node type
@@ -520,23 +538,43 @@ function CanvasPage({ userId }: CanvasPageProps) {
       const sourceNode = currentNodes.find(n => n.id === sourceNodeId)
       if (!sourceNode) return currentNodes
 
+      // Get dimensions of source and new node
+      const sourceDims = getNodeDimensions(sourceNode.type || 'rectangle', sourceNode.data?.label)
+      const newNodeLabel = `${labelMap[nodeType] || 'Node'} ${nodeIdCounter}`
+      const newDims = getNodeDimensions(nodeType, newNodeLabel)
+
+      // Calculate center of source node
+      const sourceCenterX = sourceNode.position.x + sourceDims.width / 2
+      const sourceCenterY = sourceNode.position.y + sourceDims.height / 2
+
       // Calculate position for new node based on handle position
-      const offset = 150 // Distance from source node
-      let newPosition = { x: sourceNode.position.x, y: sourceNode.position.y }
+      // Offset includes spacing between nodes + half of each node's dimension
+      const spacing = 50 // Space between nodes
+      const offset = spacing + (sourceDims.width + newDims.width) / 2
+      const verticalOffset = spacing + (sourceDims.height + newDims.height) / 2
+
+      let newCenterX = sourceCenterX
+      let newCenterY = sourceCenterY
 
       switch (handlePosition) {
         case Position.Top:
-          newPosition = { x: sourceNode.position.x, y: sourceNode.position.y - offset }
+          newCenterY = sourceCenterY - verticalOffset
           break
         case Position.Bottom:
-          newPosition = { x: sourceNode.position.x, y: sourceNode.position.y + offset }
+          newCenterY = sourceCenterY + verticalOffset
           break
         case Position.Left:
-          newPosition = { x: sourceNode.position.x - offset, y: sourceNode.position.y }
+          newCenterX = sourceCenterX - offset
           break
         case Position.Right:
-          newPosition = { x: sourceNode.position.x + offset, y: sourceNode.position.y }
+          newCenterX = sourceCenterX + offset
           break
+      }
+
+      // Convert center position back to top-left position for React Flow
+      const newPosition = {
+        x: newCenterX - newDims.width / 2,
+        y: newCenterY - newDims.height / 2
       }
 
       // Create new node
@@ -544,7 +582,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
       const newNode: Node = {
         id: newNodeId,
         type: nodeType,
-        data: { label: `${labelMap[nodeType] || 'Node'} ${nodeIdCounter}` },
+        data: { label: newNodeLabel },
         position: newPosition
       }
 
@@ -573,7 +611,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
       // Return new nodes array
       return [...currentNodes, newNode]
     })
-  }, [nodeIdCounter, setNodes, setEdges])
+  }, [nodeIdCounter, getNodeDimensions, setNodes, setEdges])
 
   // Handle selection changes
   const onSelectionChange = useCallback((params: OnSelectionChangeParams) => {

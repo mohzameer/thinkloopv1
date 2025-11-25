@@ -40,8 +40,8 @@ export const EditableEdge = ({
     : ((style as React.CSSProperties)?.stroke as string || '#b1b1b7')
   
   const strokeWidth = selected 
-    ? 3 // Thicker stroke when selected
-    : ((style as React.CSSProperties)?.strokeWidth as number || 2)
+    ? 2 // Slightly thicker when selected
+    : ((style as React.CSSProperties)?.strokeWidth as number || 1)
 
   return (
     <>
