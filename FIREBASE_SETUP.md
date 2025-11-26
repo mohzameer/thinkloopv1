@@ -46,7 +46,7 @@
 1. In Firebase Console, go to **Project Settings** (gear icon)
 2. Scroll down to "Your apps"
 3. Click the web icon (`</>`) to create a web app
-4. Register your app with a nickname (e.g., "ThinkPost Web")
+4. Register your app with a nickname (e.g., "ThinkLoops Web")
 5. Copy the `firebaseConfig` object values
 
 ## 2. Local Environment Setup

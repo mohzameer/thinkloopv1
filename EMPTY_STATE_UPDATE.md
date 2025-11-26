@@ -68,7 +68,7 @@ Removed auto-creation logic:
 ### First-Time User Experience
 
 1. User opens app
-   - Sees "Loading ThinkPost..." briefly
+   - Sees "Loading ThinkLoops..." briefly
    - App loads with empty state
    - Left sidebar: "No files yet"
    - Center: "Select a file to start working" with disabled icon toolbar
@@ -92,7 +92,7 @@ Removed auto-creation logic:
 ### Returning User Experience
 
 1. User opens app
-   - Sees "Loading ThinkPost..."
+   - Sees "Loading ThinkLoops..."
    - App loads files from Firestore
    - First file auto-selected
    - Canvas and hierarchy load immediately

@@ -46,7 +46,7 @@ export const Header = ({ selectedFile, isSaving, onOpenFileExplorer }: HeaderPro
           transition: 'color 0.3s ease'
         }}
       >
-        ThinkPost
+        ThinkLoops
       </Text>
 
       {/* Middle: Post Title */}

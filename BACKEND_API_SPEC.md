@@ -459,7 +459,7 @@ NODE_ENV=development
 
 ```json
 {
-  "name": "thinkpost-backend",
+  "name": "thinkloops-backend",
   "version": "1.0.0",
   "type": "module",
   "main": "server.js",

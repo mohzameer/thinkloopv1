@@ -1526,7 +1526,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
       }}>
         <Stack align="center" gap="md">
           <Loader size="lg" />
-          <Text c="dimmed">Loading ThinkPost...</Text>
+          <Text c="dimmed">Loading ThinkLoops...</Text>
         </Stack>
       </Box>
     )

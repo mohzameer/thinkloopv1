@@ -1,6 +1,6 @@
 # Database Helper Functions Documentation
 
-Complete guide to using the Firestore database helper functions in ThinkPost.
+Complete guide to using the Firestore database helper functions in ThinkLoops.
 
 ## Overview
 

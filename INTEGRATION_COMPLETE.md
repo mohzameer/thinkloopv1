@@ -120,8 +120,8 @@ npm run dev
 ```
 
 **Expected behavior:**
-1. See "Initializing ThinkPost..." briefly
-2. See "Loading ThinkPost..." while project/files load
+1. See "Initializing ThinkLoops..." briefly
+2. See "Loading ThinkLoops..." while project/files load
 3. App loads with:
    - One "Untitled" file in left sidebar (auto-created)
    - One "Main" item with "Var 1 (default)" sub-item in right sidebar
@@ -208,7 +208,7 @@ npm run dev
 
 ## Common Issues & Solutions
 
-### Issue: "Loading ThinkPost..." forever
+### Issue: "Loading ThinkLoops..." forever
 **Solution:**
 - Check browser console for errors
 - Verify `.env.local` has correct Firebase config
@@ -338,7 +338,7 @@ files/{fileId}
 
 ## Congratulations! 🎉
 
-Your ThinkPost app is now fully integrated with Firebase and ready to use!
+Your ThinkLoops app is now fully integrated with Firebase and ready to use!
 
 All data is:
 - ✅ Persisted to Firestore

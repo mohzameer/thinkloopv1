@@ -1,10 +1,10 @@
 # Authentication Implementation Guide
 
-This document explains the authentication system implemented in ThinkPost.
+This document explains the authentication system implemented in ThinkLoops.
 
 ## Overview
 
-ThinkPost uses Firebase Authentication with the following features:
+ThinkLoops uses Firebase Authentication with the following features:
 - **Anonymous sign-in by default** - Users can start using the app immediately
 - **Account upgrade** - Anonymous users can later create an account with email/password
 - **Data preservation** - When upgrading, all existing data is preserved
