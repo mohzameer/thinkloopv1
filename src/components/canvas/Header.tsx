@@ -1,5 +1,5 @@
-import { Flex, Text, ActionIcon, Loader, Group } from '@mantine/core'
-import { IconUser, IconMoon, IconSun, IconFolder } from '@tabler/icons-react'
+import { Flex, Text, ActionIcon, Loader, Group, Button } from '@mantine/core'
+import { IconUser, IconMoon, IconSun, IconFolder, IconPlus, IconDownload } from '@tabler/icons-react'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useState } from 'react'
 import { AuthModal } from '../AuthModal'
@@ -35,19 +35,31 @@ export const Header = ({ selectedFile, isSaving, onOpenFileExplorer }: HeaderPro
         transition: 'background-color 0.3s ease, border-color 0.3s ease'
       }}
     >
-      {/* Left: App Name */}
-      <Text
-        size="xl"
-        fw={700}
-        style={{
-          flex: '0 0 auto',
-          fontSize: '20px',
-          color: 'var(--text-primary)',
-          transition: 'color 0.3s ease'
-        }}
-      >
-        ThinkLoops
-      </Text>
+      {/* Left: App Name and New Idea Button */}
+      <Group gap="md" style={{ flex: '0 0 auto' }}>
+        <Text
+          size="xl"
+          fw={700}
+          style={{
+            fontSize: '20px',
+            color: 'var(--text-primary)',
+            transition: 'color 0.3s ease'
+          }}
+        >
+          ThinkLoops
+        </Text>
+        <Button
+          variant="subtle"
+          leftSection={<IconPlus size={18} />}
+          size="sm"
+          style={{
+            color: 'var(--text-primary)',
+            transition: 'color 0.3s ease'
+          }}
+        >
+          New Idea
+        </Button>
+      </Group>
 
       {/* Middle: Post Title */}
       <Flex align="center" gap="sm" style={{ flex: '1 1 auto', justifyContent: 'center' }}>
@@ -68,17 +80,31 @@ export const Header = ({ selectedFile, isSaving, onOpenFileExplorer }: HeaderPro
         )}
       </Flex>
 
-      {/* Right: File Explorer, Theme Toggle & User Button */}
+      {/* Right: All Ideas, Export, Theme Toggle & User Button */}
       <Group gap="xs" style={{ flex: '0 0 auto' }}>
-        <ActionIcon
-          size="lg"
+        <Button
           variant="subtle"
-          color="gray"
+          leftSection={<IconFolder size={18} />}
+          size="sm"
           onClick={onOpenFileExplorer}
-          title="Open File Explorer"
+          style={{
+            color: 'var(--text-primary)',
+            transition: 'color 0.3s ease'
+          }}
         >
-          <IconFolder size={24} />
-        </ActionIcon>
+          All Ideas
+        </Button>
+        <Button
+          variant="subtle"
+          leftSection={<IconDownload size={18} />}
+          size="sm"
+          style={{
+            color: 'var(--text-primary)',
+            transition: 'color 0.3s ease'
+          }}
+        >
+          Export
+        </Button>
         <ActionIcon
           size="lg"
           variant="subtle"
