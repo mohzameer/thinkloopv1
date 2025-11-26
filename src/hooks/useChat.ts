@@ -9,7 +9,7 @@ import type { Timestamp } from 'firebase/firestore'
 import type { Node, Edge } from '@xyflow/react'
 import { sendMessage as sendAIMessage } from '../services/ai/aiService'
 import { buildPrompt } from '../services/ai/promptBuilder'
-import { parseAIResponse, isAddResponse, isAnswerResponse, isClarifyResponse, isErrorResponse } from '../services/ai/responseParser'
+import { parseAIResponse, isAddResponse, isUpdateResponse, isAnswerResponse, isClarifyResponse, isErrorResponse, isComplexityWarningResponse } from '../services/ai/responseParser'
 import { classifyIntent } from '../services/ai/intentClassifier'
 import { extractCanvasContext } from '../services/ai/contextExtractor'
 import { manageContext, type ContextWarning } from '../services/ai/contextManager'
@@ -76,6 +76,9 @@ export const useChat = (
   const [error, setError] = useState<string | null>(null)
   const [contextWarning, setContextWarning] = useState<ContextWarning | null>(null)
   const [clarificationState, setClarificationState] = useState<ClarificationState | null>(null)
+  
+  // Step tracking for simulations
+  const [simulationStepCount, setSimulationStepCount] = useState(0)
 
   const nodes = options?.nodes || []
   const edges = options?.edges || []
@@ -165,10 +168,58 @@ export const useChat = (
           setError(null)
           setContextWarning(null)
 
+          // Performance monitoring: track start time
+          const processingStartTime = performance.now()
+          const MAX_PROCESSING_TIME = 30000 // 30 seconds
+
+          // Check if user explicitly asked for more than 5 nodes or more simulation steps
+          const userExplicitlyRequestedComplex = 
+            content.toLowerCase().includes('proceed') ||
+            content.toLowerCase().includes('continue') ||
+            content.toLowerCase().includes('all nodes') ||
+            content.toLowerCase().includes('more than 5') ||
+            content.toLowerCase().includes('complex') ||
+            content.toLowerCase().includes('full')
+
           // Classify intent
           const classification = classifyIntent(content, {
             previousIntent: undefined // Could track this in state
           })
+
+          // Track simulation steps
+          if (classification.intent === 'SIMULATE') {
+            const newStepCount = simulationStepCount + 1
+            setSimulationStepCount(newStepCount)
+            
+            // Check if simulation steps exceed limit (unless explicitly requested)
+            if (newStepCount > 5 && !userExplicitlyRequestedComplex) {
+              const warningMessage = `Simulation has reached ${newStepCount} steps, which exceeds the recommended limit of 5. The simulation is getting complex. Please break it down into smaller steps or explicitly request to continue.`
+              
+              const warningMessageId = await createMessageInDb(
+                fileId,
+                mainItemId,
+                subItemId,
+                'assistant',
+                warningMessage
+              )
+              
+              setMessages(prev => [...prev, {
+                id: warningMessageId || `temp-${Date.now()}`,
+                role: 'assistant',
+                content: warningMessage,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              }])
+              
+              setError('Simulation step limit reached')
+              setIsAIProcessing(false)
+              loadMessages().catch(err => console.error('[useChat] Error reloading messages:', err))
+              return { messageId }
+            }
+          } else {
+            // Reset simulation step count if not simulating
+            setSimulationStepCount(0)
+          }
 
           // Extract canvas context
           const canvasContext = extractCanvasContext(nodes, edges, {
@@ -206,13 +257,26 @@ export const useChat = (
             userMessage: content.trim()
           })
 
-          // Call Claude API
-          const claudeResponse = await sendAIMessage({
+          // Performance check: if processing is taking too long, abort
+          const elapsedTime = performance.now() - processingStartTime
+          if (elapsedTime > MAX_PROCESSING_TIME) {
+            throw new Error('Processing is taking too long. The request is too complex. Please try breaking it down into smaller steps.')
+          }
+
+          // Call Claude API with timeout protection
+          const apiCallPromise = sendAIMessage({
             system: systemPrompt,
             messages: promptMessages,
             maxTokens: 4096,
             temperature: 0.7
           })
+
+          // Add timeout wrapper
+          const timeoutPromise = new Promise<Awaited<ReturnType<typeof sendAIMessage>>>((_, reject) => {
+            setTimeout(() => reject(new Error('Request timeout: Processing took too long. The request may be too complex.')), MAX_PROCESSING_TIME - elapsedTime)
+          })
+
+          const claudeResponse = await Promise.race([apiCallPromise, timeoutPromise])
 
           if (claudeResponse.error) {
             // Convert Claude error to AIError for better handling
@@ -221,13 +285,47 @@ export const useChat = (
             throw new Error(aiError.userMessage)
           }
 
+          // Performance check: final check before parsing
+          const totalElapsedTime = performance.now() - processingStartTime
+          if (totalElapsedTime > MAX_PROCESSING_TIME) {
+            throw new Error('Processing exceeded time limit. The request is too complex. Please try breaking it down into smaller steps.')
+          }
+
           // Parse AI response
           const parsedResponse = parseAIResponse(claudeResponse.content)
 
           // Handle different response types
-          if (isAddResponse(parsedResponse)) {
+          if (isComplexityWarningResponse(parsedResponse)) {
+            // Handle complexity warning
+            const complexityMessage = parsedResponse.message
+            
+            const complexityMessageId = await createMessageInDb(
+              fileId,
+              mainItemId,
+              subItemId,
+              'assistant',
+              complexityMessage
+            )
+            
+            setMessages(prev => [...prev, {
+              id: complexityMessageId || `temp-${Date.now()}`,
+              role: 'assistant',
+              content: complexityMessage,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            }])
+            
+            setError('Complex scenario detected')
+            loadMessages().catch(err => console.error('[useChat] Error reloading messages:', err))
+          } else if (isAddResponse(parsedResponse)) {
             // For ADD responses, we'll return the data for parent to handle
             // The nodes/edges will be generated in CanvasPage
+            aiResponse = {
+              response: parsedResponse
+            }
+          } else if (isUpdateResponse(parsedResponse)) {
+            // For UPDATE responses, we'll return the data for parent to handle
+            // The node updates will be applied in CanvasPage with user permission
             aiResponse = {
               response: parsedResponse
             }
@@ -448,13 +546,29 @@ export const useChat = (
           userMessage: resumedMessage
         })
 
-        // Call Claude API
-        const claudeResponse = await sendClaudeMessage({
+        // Performance monitoring for clarification flow
+        const clarificationStartTime = performance.now()
+        const MAX_PROCESSING_TIME = 30000 // 30 seconds
+
+        // Call Claude API with timeout protection
+        const apiCallPromise = sendAIMessage({
           system: systemPrompt,
           messages: promptMessages,
           maxTokens: 4096,
           temperature: 0.7
         })
+
+        const timeoutPromise = new Promise<Awaited<ReturnType<typeof sendAIMessage>>>((_, reject) => {
+          setTimeout(() => reject(new Error('Request timeout: Processing took too long. The request may be too complex.')), MAX_PROCESSING_TIME)
+        })
+
+        const claudeResponse = await Promise.race([apiCallPromise, timeoutPromise])
+
+        // Performance check
+        const clarificationElapsedTime = performance.now() - clarificationStartTime
+        if (clarificationElapsedTime > MAX_PROCESSING_TIME) {
+          throw new Error('Processing exceeded time limit. The request is too complex. Please try breaking it down into smaller steps.')
+        }
 
         if (claudeResponse.error) {
           const aiError = convertClaudeError({ type: 'unknown', message: claudeResponse.error })
@@ -466,7 +580,26 @@ export const useChat = (
         const parsedResponse = parseAIResponse(claudeResponse.content)
 
         // Handle response (same as sendMessage)
-        if (isAddResponse(parsedResponse)) {
+        if (isComplexityWarningResponse(parsedResponse)) {
+          // Handle complexity warning in clarification flow
+          const complexityMessage = parsedResponse.message
+          await createMessageInDb(
+            fileId,
+            mainItemId,
+            subItemId,
+            'assistant',
+            complexityMessage
+          )
+          await loadMessages()
+          setClarificationState(null)
+          return null
+        } else if (isAddResponse(parsedResponse)) {
+          // Return for parent to handle
+          setClarificationState(null)
+          return {
+            response: parsedResponse
+          }
+        } else if (isUpdateResponse(parsedResponse)) {
           // Return for parent to handle
           setClarificationState(null)
           return {

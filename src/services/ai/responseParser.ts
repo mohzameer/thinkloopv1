@@ -21,11 +21,19 @@ export interface EdgeData {
   label?: string
 }
 
+export interface NodeUpdateData {
+  nodeId?: string  // Node ID (preferred)
+  nodeLabel?: string  // Node label to identify the node (if ID not available)
+  newLabel: string  // New label text for the node
+}
+
 export type AIResponse =
-  | { action: 'add'; nodes: NodeData[]; edges: EdgeData[]; explanation: string }
+  | { action: 'add'; nodes: NodeData[]; edges: EdgeData[]; explanation: string; complexityWarning?: boolean }
+  | { action: 'update'; nodeUpdates: NodeUpdateData[]; explanation: string }
   | { action: 'answer'; response: string }
   | { action: 'clarify'; questions: string[]; context: string }
   | { action: 'error'; message: string }
+  | { action: 'complexity_warning'; message: string; suggestedNodes?: number }
 
 /**
  * Extract JSON from text (handles markdown code blocks, etc.)
@@ -149,6 +157,9 @@ function validateEdgeData(edge: any): EdgeData | null {
   }
 }
 
+// Maximum nodes allowed before complexity warning
+const MAX_NODES_WITHOUT_WARNING = 5
+
 /**
  * Parse ADD action response
  */
@@ -176,6 +187,15 @@ function parseAddAction(data: any): AIResponse {
     }
   }
 
+  // Check complexity: if more than 5 nodes, flag as complex
+  if (nodes.length > MAX_NODES_WITHOUT_WARNING) {
+    return {
+      action: 'complexity_warning',
+      message: `This scenario is complex and requires ${nodes.length} nodes, which exceeds the recommended limit of ${MAX_NODES_WITHOUT_WARNING}. Please break this down into smaller steps or explicitly request to proceed with the full complexity.`,
+      suggestedNodes: nodes.length
+    }
+  }
+
   // Validate and parse edges (optional)
   const edges: EdgeData[] = []
   if (data.edges && Array.isArray(data.edges)) {
@@ -196,6 +216,71 @@ function parseAddAction(data: any): AIResponse {
     action: 'add',
     nodes,
     edges,
+    explanation,
+    complexityWarning: false
+  }
+}
+
+/**
+ * Parse UPDATE action response
+ */
+function parseUpdateAction(data: any): AIResponse {
+  if (!data.nodeUpdates || !Array.isArray(data.nodeUpdates)) {
+    return {
+      action: 'error',
+      message: 'Invalid UPDATE response: missing or invalid nodeUpdates array'
+    }
+  }
+
+  // Validate and parse node updates
+  const nodeUpdates: NodeUpdateData[] = []
+  for (const update of data.nodeUpdates) {
+    if (!update || typeof update !== 'object') {
+      continue
+    }
+
+    // Must have newLabel
+    if (!update.newLabel || typeof update.newLabel !== 'string') {
+      continue
+    }
+
+    // Must have either nodeId or nodeLabel
+    if (!update.nodeId && !update.nodeLabel) {
+      continue
+    }
+
+    const validated: NodeUpdateData = {
+      newLabel: update.newLabel.trim()
+    }
+
+    if (update.nodeId && typeof update.nodeId === 'string') {
+      validated.nodeId = update.nodeId.trim()
+    }
+
+    if (update.nodeLabel && typeof update.nodeLabel === 'string') {
+      validated.nodeLabel = update.nodeLabel.trim()
+    }
+
+    if (validated.newLabel.length > 0) {
+      nodeUpdates.push(validated)
+    }
+  }
+
+  if (nodeUpdates.length === 0) {
+    return {
+      action: 'error',
+      message: 'Invalid UPDATE response: no valid node updates found'
+    }
+  }
+
+  // Get explanation
+  const explanation = data.explanation && typeof data.explanation === 'string'
+    ? data.explanation.trim()
+    : `Updated ${nodeUpdates.length} node label(s)`
+
+  return {
+    action: 'update',
+    nodeUpdates,
     explanation
   }
 }
@@ -303,6 +388,9 @@ export function parseAIResponse(response: string): AIResponse {
     case 'add':
       return parseAddAction(jsonData)
 
+    case 'update':
+      return parseUpdateAction(jsonData)
+
     case 'answer':
       return parseAnswerAction(jsonData, trimmed)
 
@@ -342,6 +430,13 @@ export function isAddResponse(response: AIResponse): response is { action: 'add'
 }
 
 /**
+ * Check if response is an UPDATE action
+ */
+export function isUpdateResponse(response: AIResponse): response is { action: 'update'; nodeUpdates: NodeUpdateData[]; explanation: string } {
+  return response.action === 'update'
+}
+
+/**
  * Check if response is an ANSWER action
  */
 export function isAnswerResponse(response: AIResponse): response is { action: 'answer'; response: string } {
@@ -353,5 +448,12 @@ export function isAnswerResponse(response: AIResponse): response is { action: 'a
  */
 export function isClarifyResponse(response: AIResponse): response is { action: 'clarify'; questions: string[]; context: string } {
   return response.action === 'clarify'
+}
+
+/**
+ * Check if response is a complexity warning
+ */
+export function isComplexityWarningResponse(response: AIResponse): response is { action: 'complexity_warning'; message: string; suggestedNodes?: number } {
+  return response.action === 'complexity_warning'
 }
 

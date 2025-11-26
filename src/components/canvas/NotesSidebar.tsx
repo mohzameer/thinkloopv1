@@ -62,7 +62,7 @@ export function NotesSidebar({
   // Auto-scroll to bottom when new messages arrive or AI processing state changes
   useEffect(() => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+      messagesEndRef.current.scrollIntoView({ behavior: 'auto' })
     }
   }, [messages, isAIProcessing])
 
@@ -394,7 +394,7 @@ export function NotesSidebar({
                 </Paper>
               )}
 
-              {isLoadingMessages ? (
+              {isLoadingMessages && !isAIProcessing ? (
                 <Flex justify="center" align="center" py="xl">
                   <Loader size="sm" />
                 </Flex>

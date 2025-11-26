@@ -12,7 +12,7 @@ import { useNotes } from '../hooks/useNotes'
 import { useChat, type AIResponseData } from '../hooks/useChat'
 import type { Tag } from '../types/firebase'
 import { generateNodesAndEdges } from '../services/ai/nodeGenerator'
-import { isAddResponse } from '../services/ai/responseParser'
+import { isAddResponse, isUpdateResponse } from '../services/ai/responseParser'
 import { createMessage as createMessageInDb, updateFileLastViewed } from '../firebase/database'
 import { Header } from './canvas/Header'
 import { HierarchySidebar } from './canvas/HierarchySidebar'
@@ -1173,6 +1173,157 @@ function CanvasPage({ userId }: CanvasPageProps) {
     }
   }, [nodes, edges, nodeIdCounter, setNodes, setEdges, setNodeIdCounter, selectedFileId, selectedMainItemId, selectedSubItemId, refreshMessages])
 
+  // Handle UPDATE response - ask for permission before updating nodes
+  const handleUpdateResponse = useCallback(async (aiResponse: AIResponseData) => {
+    try {
+      // Type guard: ensure it's an UPDATE response
+      if (!isUpdateResponse(aiResponse.response)) {
+        console.warn('[CanvasPage] Response is not an UPDATE response')
+        return
+      }
+
+      // Validate response has node updates
+      if (!aiResponse.response.nodeUpdates || !Array.isArray(aiResponse.response.nodeUpdates) || aiResponse.response.nodeUpdates.length === 0) {
+        console.warn('[CanvasPage] No node updates to apply from AI response')
+        return
+      }
+
+      // Store pending update
+      setPendingAIDrawing(aiResponse)
+
+      // Build permission request message
+      const updateDescriptions = aiResponse.response.nodeUpdates.map(update => {
+        const identifier = update.nodeId || update.nodeLabel || 'Unknown'
+        return `"${identifier}" → "${update.newLabel}"`
+      })
+      
+      let permissionMessage = `I can update ${aiResponse.response.nodeUpdates.length} node label(s):\n\n`
+      updateDescriptions.forEach((desc, idx) => {
+        permissionMessage += `${idx + 1}. ${desc}\n`
+      })
+      permissionMessage += `\n${aiResponse.response.explanation || ''}\n\nWould you like me to proceed? (Reply "yes" to confirm or "no" to cancel)`
+
+      // Save permission request message (without triggering AI)
+      if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+        try {
+          await createMessageInDb(
+            selectedFileId,
+            selectedMainItemId,
+            selectedSubItemId,
+            'assistant',
+            permissionMessage
+          )
+          await refreshMessages()
+        } catch (error) {
+          console.error('[CanvasPage] Error saving permission message:', error)
+        }
+      }
+    } catch (error) {
+      console.error('[CanvasPage] Error handling UPDATE response:', error)
+    }
+  }, [selectedFileId, selectedMainItemId, selectedSubItemId, refreshMessages])
+
+  // Execute AI update (actually update node labels on canvas)
+  const executeAIUpdate = useCallback(async (aiResponse: AIResponseData) => {
+    try {
+      // Type guard: ensure it's an UPDATE response
+      if (!isUpdateResponse(aiResponse.response)) {
+        console.warn('[CanvasPage] Response is not an UPDATE response')
+        return
+      }
+
+      // Now TypeScript knows it's an UPDATE response
+      const updateResponse = aiResponse.response
+
+      // Validate response has node updates
+      if (!updateResponse.nodeUpdates || !Array.isArray(updateResponse.nodeUpdates) || updateResponse.nodeUpdates.length === 0) {
+        console.warn('[CanvasPage] No node updates to apply from AI response')
+        return
+      }
+
+      // Create a label-to-ID mapping for existing nodes
+      const labelToIdMap = new Map<string, string>()
+      nodes.forEach(node => {
+        const label = (node.data as any)?.label
+        if (label && typeof label === 'string') {
+          // Use first match (if multiple nodes have same label, use first one)
+          if (!labelToIdMap.has(label.toLowerCase())) {
+            labelToIdMap.set(label.toLowerCase(), node.id)
+          }
+        }
+      })
+
+      // Apply updates
+      let updateCount = 0
+      const errors: string[] = []
+
+      setNodes((nds) => {
+        return nds.map((node) => {
+          // Check if this node should be updated
+          for (const update of updateResponse.nodeUpdates) {
+            let shouldUpdate = false
+
+            // Check by nodeId first (preferred)
+            if (update.nodeId && node.id === update.nodeId) {
+              shouldUpdate = true
+            }
+            // Check by nodeLabel if nodeId not provided
+            else if (update.nodeLabel) {
+              const nodeLabel = (node.data as any)?.label
+              if (nodeLabel && typeof nodeLabel === 'string' && 
+                  nodeLabel.toLowerCase() === update.nodeLabel.toLowerCase()) {
+                shouldUpdate = true
+              }
+            }
+
+            if (shouldUpdate) {
+              updateCount++
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  label: update.newLabel
+                }
+              }
+            }
+          }
+          return node
+        })
+      })
+
+      if (updateCount === 0) {
+        errors.push('No matching nodes found to update')
+      }
+
+      // Show errors if any
+      if (errors.length > 0) {
+        console.error('[CanvasPage] Node update errors:', errors)
+      }
+
+      // Save assistant message confirming the update
+      if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+        try {
+          const confirmationMessage = updateCount > 0
+            ? `Updated ${updateCount} node label(s)${errors.length > 0 ? `. Some updates failed: ${errors.join(', ')}` : ''}.`
+            : `Failed to update nodes: ${errors.join(', ')}.`
+
+          await createMessageInDb(
+            selectedFileId,
+            selectedMainItemId,
+            selectedSubItemId,
+            'assistant',
+            confirmationMessage
+          )
+          await refreshMessages()
+        } catch (saveError) {
+          console.error('[CanvasPage] Error saving confirmation message:', saveError)
+        }
+      }
+    } catch (error) {
+      console.error('[CanvasPage] Error executing AI update:', error)
+    }
+  }, [nodes, setNodes, selectedFileId, selectedMainItemId, selectedSubItemId, refreshMessages])
+
   // Handle ADD response - ask for permission instead of immediately drawing
   const handleAddResponse = useCallback(async (aiResponse: AIResponseData) => {
     try {
@@ -1244,12 +1395,16 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
   // Handle sending chat message with AI response processing
   const handleSendMessage = useCallback(async (content: string) => {
-    // Check if user is confirming a pending drawing
+    // Check if user is confirming a pending action
     const isConfirmation = /^(yes|yep|yeah|ok|okay|proceed|go ahead|do it|confirm|approved?)$/i.test(content.trim())
     
     if (isConfirmation && pendingAIDrawing) {
-      // User confirmed, proceed with drawing
-      await executeAIDrawing(pendingAIDrawing)
+      // User confirmed, proceed with action
+      if (isAddResponse(pendingAIDrawing.response)) {
+        await executeAIDrawing(pendingAIDrawing)
+      } else if (isUpdateResponse(pendingAIDrawing.response)) {
+        await executeAIUpdate(pendingAIDrawing)
+      }
       setPendingAIDrawing(null)
       return null
     }
@@ -1257,14 +1412,17 @@ function CanvasPage({ userId }: CanvasPageProps) {
     // Check if user is rejecting
     const isRejection = /^(no|nope|nah|cancel|stop|don't|dont)$/i.test(content.trim())
     if (isRejection && pendingAIDrawing) {
-      // User rejected, clear pending drawing
+      // User rejected, clear pending action
+      const actionType = isAddResponse(pendingAIDrawing.response) ? 'add those nodes' : 
+                        isUpdateResponse(pendingAIDrawing.response) ? 'update those nodes' : 
+                        'perform that action'
       if (selectedFileId && selectedMainItemId && selectedSubItemId) {
         await createMessageInDb(
           selectedFileId,
           selectedMainItemId,
           selectedSubItemId,
           'assistant',
-          'Understood. I won\'t add those nodes. How else can I help?'
+          `Understood. I won't ${actionType}. How else can I help?`
         )
         await refreshMessages()
       }
@@ -1275,20 +1433,28 @@ function CanvasPage({ userId }: CanvasPageProps) {
     const result = await sendChatMessage(content)
 
     // Handle AI response if present
-    if (result.aiResponse && isAddResponse(result.aiResponse.response)) {
-      await handleAddResponse(result.aiResponse)
+    if (result.aiResponse) {
+      if (isAddResponse(result.aiResponse.response)) {
+        await handleAddResponse(result.aiResponse)
+      } else if (isUpdateResponse(result.aiResponse.response)) {
+        await handleUpdateResponse(result.aiResponse)
+      }
     }
 
     return result.messageId
-  }, [sendChatMessage, pendingAIDrawing, executeAIDrawing, handleAddResponse, selectedFileId, selectedMainItemId, selectedSubItemId, refreshMessages])
+  }, [sendChatMessage, pendingAIDrawing, executeAIDrawing, executeAIUpdate, handleAddResponse, handleUpdateResponse, selectedFileId, selectedMainItemId, selectedSubItemId, refreshMessages])
 
   // Handle clarification answer
   const handleAnswerClarification = useCallback(async (questionIndex: number, answer: string) => {
     const aiResponse = await answerClarification(questionIndex, answer)
-    if (aiResponse && isAddResponse(aiResponse.response)) {
-      await handleAddResponse(aiResponse)
+    if (aiResponse) {
+      if (isAddResponse(aiResponse.response)) {
+        await handleAddResponse(aiResponse)
+      } else if (isUpdateResponse(aiResponse.response)) {
+        await handleUpdateResponse(aiResponse)
+      }
     }
-  }, [answerClarification, handleAddResponse])
+  }, [answerClarification, handleAddResponse, handleUpdateResponse])
 
   // Clear pending drawing when switching contexts
   useEffect(() => {

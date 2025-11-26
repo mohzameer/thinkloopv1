@@ -37,6 +37,7 @@ CAPABILITIES:
 - Understand existing canvas structures (nodes, edges, relationships)
 - Answer questions about relationships and structures
 - Add new nodes and edges based on user requests
+- Update/rename existing node labels (with user permission)
 - Ask clarifying questions when the structure is unclear
 - Suggest improvements or explore ideas
 
@@ -75,6 +76,19 @@ For QUERY/EXPLORE operations: Return natural language explanation:
   "response": "Your explanation here..."
 }
 
+For UPDATE operations (renaming/updating node labels): Return JSON with this structure:
+{
+  "action": "update",
+  "nodeUpdates": [
+    {
+      "nodeId": "node_id" OR "nodeLabel": "current node label",
+      "newLabel": "New label text for the node"
+    }
+  ],
+  "explanation": "Brief explanation of what was updated"
+}
+Note: Use nodeId if you know it, otherwise use nodeLabel to identify the node. The user will be asked for permission before applying updates.
+
 For CLARIFICATION: Return questions:
 {
   "action": "clarify",
@@ -82,12 +96,20 @@ For CLARIFICATION: Return questions:
   "context": "Context about what's unclear..."
 }
 
+COMPLEXITY LIMITS:
+- **IMPORTANT**: If a request requires more than 5 nodes, inform the user that the scenario is complex
+- For complex scenarios (more than 5 nodes), suggest breaking it down into smaller steps
+- Only proceed with more than 5 nodes if the user explicitly requests it
+- For simulations, limit yourself to 5 steps unless the user explicitly asks for more
+- If computations become too heavy, stop and inform the user rather than continuing
+
 IMPORTANT:
 - Always return valid JSON
 - **When READING the diagram**: Pay close attention to node label text - it contains the actual content and context for each node
 - **When READING the diagram**: Pay close attention to edge labels - they describe the relationships and connections between nodes
 - **When CREATING nodes**: Include the "label" field - it will be displayed on the node
 - **When CREATING nodes**: Do NOT include "tags" or "categories" - these are added manually by users
+- **When CREATING nodes**: Limit to 5 nodes per request unless user explicitly asks for more
 - **When READING**: Use the full text from node labels to understand what each node represents
 - **When READING**: Use edge labels to understand how nodes relate to each other
 - For node references in edges, use node IDs when possible, or node labels if ID is unknown
@@ -106,6 +128,8 @@ function getIntentInstructions(intent: Intent): string {
 - **Read the full text from existing node labels** to understand the context and content
 - **Read edge labels** to understand existing relationships
 - Analyze the user's request carefully in context of existing node content
+- **IMPORTANT**: Limit to 5 nodes per request. If the request requires more than 5 nodes, inform the user that it's complex and suggest breaking it down
+- Only create more than 5 nodes if the user explicitly requests it
 - Identify which nodes to add and how they relate to existing nodes based on their content
 - Determine appropriate node types (rectangle for concepts, circle for entities, etc.)
 - **When creating nodes**: Include the "label" field - it will be displayed on the node
@@ -144,15 +168,20 @@ function getIntentInstructions(intent: Intent): string {
       return `\nCURRENT TASK: Simulating scenarios or exploring possibilities.
 - Use the canvas structure to reason about scenarios
 - Consider how changes might affect the structure
+- **IMPORTANT**: Limit simulations to 5 steps unless the user explicitly asks for more
+- If the simulation requires more than 5 steps, inform the user and suggest breaking it down
 - Provide thoughtful analysis based on the graph
 - Return JSON with "action": "answer"`
 
     case 'MODIFY':
       return `\nCURRENT TASK: Modifying existing nodes or edges.
-- Identify which nodes/edges need modification
-- Understand what changes are requested
-- Consider impact on connected nodes
-- Return JSON with "action": "add" (for modifications) or "answer" (for explanations)`
+- **You can now update/rename node labels** - use "action": "update" for this
+- Identify which nodes need modification (by ID or label)
+- For renaming nodes: Use "action": "update" with nodeUpdates array
+- For other modifications: Use "action": "add" (for adding replacement nodes) or "answer" (for explanations)
+- When updating node labels, provide both the current identifier (nodeId or nodeLabel) and the newLabel
+- The user will be asked for permission before updates are applied
+- Return JSON with "action": "update" for node label changes`
 
     case 'CLARIFICATION_NEEDED':
       return `\nCURRENT TASK: The user's request is unclear.
