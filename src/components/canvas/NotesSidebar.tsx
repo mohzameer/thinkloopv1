@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { Box, Stack, Text, ScrollArea, Paper, Badge, Flex, ActionIcon, Tabs, Textarea, Loader, Alert, Progress, Collapse } from '@mantine/core'
-import { IconNote, IconCheck, IconRobot, IconMessageCircle, IconSend, IconAlertCircle, IconInfoCircle, IconAlertTriangle, IconChevronDown, IconChevronUp } from '@tabler/icons-react'
+import { Box, Stack, Text, ScrollArea, Paper, Badge, Flex, ActionIcon, Tabs, Textarea, Loader, Alert, Progress, Collapse, Button, Group } from '@mantine/core'
+import { IconNote, IconCheck, IconRobot, IconMessageCircle, IconSend, IconAlertCircle, IconInfoCircle, IconAlertTriangle, IconChevronDown, IconChevronUp, IconCopy, IconGitBranch } from '@tabler/icons-react'
 import ReactMarkdown from 'react-markdown'
-import type { ChatMessage, ClarificationState } from '../../hooks/useChat'
+import type { ChatMessage, ClarificationState, AIResponseData } from '../../hooks/useChat'
 import type { ContextWarning } from '../../services/ai/contextManager'
 
 interface Note {
@@ -31,6 +31,10 @@ interface NotesSidebarProps {
   onSendMessage?: (content: string) => Promise<string | null>
   onAnswerClarification?: (questionIndex: number, answer: string) => Promise<void>
   onCancelClarification?: () => void
+  pendingAIDrawing?: AIResponseData | null
+  onApplyDrawing?: () => void
+  onDuplicateDrawing?: () => void
+  onBranchAsMain?: () => void
 }
 
 export function NotesSidebar({ 
@@ -50,7 +54,11 @@ export function NotesSidebar({
   clarificationState = null,
   onSendMessage,
   onAnswerClarification,
-  onCancelClarification
+  onCancelClarification,
+  pendingAIDrawing,
+  onApplyDrawing,
+  onDuplicateDrawing,
+  onBranchAsMain
 }: NotesSidebarProps) {
   const [chatInput, setChatInput] = useState('')
   const [isSending, setIsSending] = useState(false)
@@ -545,6 +553,44 @@ export function NotesSidebar({
                     >
                       {message.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </Text>
+                    {/* Show action buttons if this is the last assistant message and there's a pending drawing */}
+                    {message.role === 'assistant' && 
+                     pendingAIDrawing && 
+                     message.id === messages.filter(m => m.role === 'assistant').slice(-1)[0]?.id && 
+                     (message.content.includes('Would you like me to proceed') || message.content.includes('proceed')) && (
+                      <Group gap="xs" mt="md" pt="md" style={{ borderTop: '1px solid var(--border-color)' }}>
+                        <Button
+                          size="xs"
+                          variant="filled"
+                          color="blue"
+                          onClick={onApplyDrawing}
+                          leftSection={<IconCheck size={14} />}
+                          style={{ flex: 1 }}
+                        >
+                          Apply Changes
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          color="gray"
+                          onClick={onDuplicateDrawing}
+                          leftSection={<IconCopy size={14} />}
+                          style={{ flex: 1 }}
+                        >
+                          Create Duplicate
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          color="gray"
+                          onClick={onBranchAsMain}
+                          leftSection={<IconGitBranch size={14} />}
+                          style={{ flex: 1 }}
+                        >
+                          Branch as Main
+                        </Button>
+                      </Group>
+                    )}
                   </Paper>
                   ))}
                   {isAIProcessing && (

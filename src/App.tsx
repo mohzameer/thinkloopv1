@@ -23,7 +23,7 @@ function App() {
         <Stack align="center" gap="lg">
           <Loader size="lg" color="blue" />
           <Text size="lg" c="dimmed">
-            Initializing ThinkPost...
+            Initializing ThinkLoops...
           </Text>
         </Stack>
       </Box>

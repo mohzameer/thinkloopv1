@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { 
-  getSubItemMessages, 
-  createMessage as createMessageInDb, 
-  updateMessage as updateMessageInDb, 
-  deleteMessage as deleteMessageInDb 
+  getFileMessages, 
+  createFileMessage as createMessageInDb, 
+  updateFileMessage as updateMessageInDb, 
+  deleteFileMessage as deleteMessageInDb 
 } from '../firebase/database'
 import type { Timestamp } from 'firebase/firestore'
 import type { Node, Edge } from '@xyflow/react'
@@ -56,13 +56,11 @@ interface UseChatReturn {
 }
 
 /**
- * Hook to manage chat messages for a specific sub-item (variation)
+ * Hook to manage chat messages for a specific file
  * Now includes AI integration for generating responses
  */
 export const useChat = (
   fileId: string | null,
-  mainItemId: string | null,
-  subItemId: string | null,
   options?: {
     nodes?: Node[]
     edges?: Edge[]
@@ -102,7 +100,7 @@ export const useChat = (
 
   // Load messages
   const loadMessages = useCallback(async () => {
-    if (!fileId || !mainItemId || !subItemId) {
+    if (!fileId) {
       setMessages([])
       setIsLoading(false)
       return
@@ -111,9 +109,9 @@ export const useChat = (
     try {
       setIsLoading(true)
       setError(null)
-      console.log('[useChat] Loading messages for:', { fileId, mainItemId, subItemId })
+      console.log('[useChat] Loading messages for file:', fileId)
       
-      const firestoreMessages = await getSubItemMessages(fileId, mainItemId, subItemId)
+      const firestoreMessages = await getFileMessages(fileId)
       const convertedMessages = firestoreMessages.map(convertMessage)
       
       console.log('[useChat] Loaded', convertedMessages.length, 'messages')
@@ -125,7 +123,7 @@ export const useChat = (
     } finally {
       setIsLoading(false)
     }
-  }, [fileId, mainItemId, subItemId, convertMessage])
+  }, [fileId, convertMessage])
 
   // Initial load and reload on change
   useEffect(() => {
@@ -134,7 +132,7 @@ export const useChat = (
 
   // Send message (user message) and generate AI response
   const sendMessage = useCallback(async (content: string): Promise<{ messageId: string | null; aiResponse?: AIResponseData }> => {
-    if (!fileId || !mainItemId || !subItemId) {
+    if (!fileId) {
       return { messageId: null }
     }
 
@@ -146,7 +144,7 @@ export const useChat = (
       console.log('[useChat] Sending message:', { content })
       
       // Save user message to database
-      const messageId = await createMessageInDb(fileId, mainItemId, subItemId, 'user', content.trim())
+      const messageId = await createMessageInDb(fileId, 'user', content.trim())
       
       // Optimistically add user message to UI (don't reload yet to avoid resetting screen)
       setMessages(prev => [...prev, {
@@ -197,8 +195,6 @@ export const useChat = (
               
               const warningMessageId = await createMessageInDb(
                 fileId,
-                mainItemId,
-                subItemId,
                 'assistant',
                 warningMessage
               )
@@ -301,8 +297,6 @@ export const useChat = (
             
             const complexityMessageId = await createMessageInDb(
               fileId,
-              mainItemId,
-              subItemId,
               'assistant',
               complexityMessage
             )
@@ -333,8 +327,6 @@ export const useChat = (
             // Save as assistant message
             const assistantMessageId = await createMessageInDb(
               fileId,
-              mainItemId,
-              subItemId,
               'assistant',
               parsedResponse.response
             )
@@ -364,8 +356,6 @@ export const useChat = (
             // Save clarification message
             const clarificationMessageId = await createMessageInDb(
               fileId,
-              mainItemId,
-              subItemId,
               'assistant',
               `I need some clarification:\n\n${parsedResponse.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\n${parsedResponse.context}`
             )
@@ -385,8 +375,6 @@ export const useChat = (
             // Save error as assistant message
             const errorMessageId = await createMessageInDb(
               fileId,
-              mainItemId,
-              subItemId,
               'assistant',
               `I encountered an error: ${parsedResponse.message}`
             )
@@ -424,8 +412,6 @@ export const useChat = (
           try {
             const errorMessageId = await createMessageInDb(
               fileId,
-              mainItemId,
-              subItemId,
               'assistant',
               `I'm sorry, I encountered an error: ${errorMessage}. Please try again or rephrase your request.`
             )
@@ -455,7 +441,7 @@ export const useChat = (
       setError(err.message || 'Failed to send message')
       return { messageId: null }
     }
-  }, [fileId, mainItemId, subItemId, loadMessages, enableAI, nodes, edges, selectedNodeIds, messages])
+  }, [fileId, loadMessages, enableAI, nodes, edges, selectedNodeIds, messages])
 
   // Answer a clarification question and resume if all answered
   const answerClarification = useCallback(async (questionIndex: number, answer: string): Promise<AIResponseData | null> => {
@@ -479,8 +465,6 @@ export const useChat = (
     // Save user answer as message
     await createMessageInDb(
       fileId,
-      mainItemId,
-      subItemId,
       'user',
       `Answer to question ${questionIndex + 1}: ${answer.trim()}`
     )
@@ -585,8 +569,6 @@ export const useChat = (
           const complexityMessage = parsedResponse.message
           await createMessageInDb(
             fileId,
-            mainItemId,
-            subItemId,
             'assistant',
             complexityMessage
           )
@@ -608,8 +590,6 @@ export const useChat = (
         } else if (isAnswerResponse(parsedResponse)) {
           await createMessageInDb(
             fileId,
-            mainItemId,
-            subItemId,
             'assistant',
             parsedResponse.response
           )
@@ -626,8 +606,6 @@ export const useChat = (
           })
           await createMessageInDb(
             fileId,
-            mainItemId,
-            subItemId,
             'assistant',
             `I need additional clarification:\n\n${parsedResponse.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\n${parsedResponse.context}`
           )
@@ -651,7 +629,7 @@ export const useChat = (
     }
     
     return null
-  }, [clarificationState, fileId, mainItemId, subItemId, loadMessages, nodes, edges, selectedNodeIds, messages])
+  }, [clarificationState, fileId, loadMessages, nodes, edges, selectedNodeIds, messages])
 
   // Cancel clarification
   const cancelClarification = useCallback(() => {
@@ -660,13 +638,13 @@ export const useChat = (
 
   // Update message content
   const updateMessage = useCallback(async (id: string, content: string): Promise<boolean> => {
-    if (!fileId || !mainItemId || !subItemId) {
+    if (!fileId) {
       return false
     }
 
     try {
       console.log('[useChat] Updating message:', id)
-      await updateMessageInDb(fileId, mainItemId, subItemId, id, content)
+      await updateMessageInDb(fileId, id, content)
       
       // Update local state
       setMessages(prev => prev.map(msg => 
@@ -679,17 +657,17 @@ export const useChat = (
       setError(err.message || 'Failed to update message')
       return false
     }
-  }, [fileId, mainItemId, subItemId])
+  }, [fileId])
 
   // Delete message
   const deleteMessage = useCallback(async (id: string): Promise<boolean> => {
-    if (!fileId || !mainItemId || !subItemId) {
+    if (!fileId) {
       return false
     }
 
     try {
       console.log('[useChat] Deleting message:', id)
-      await deleteMessageInDb(fileId, mainItemId, subItemId, id)
+      await deleteMessageInDb(fileId, id)
       
       // Update local state
       setMessages(prev => prev.filter(msg => msg.id !== id))
@@ -700,7 +678,7 @@ export const useChat = (
       setError(err.message || 'Failed to delete message')
       return false
     }
-  }, [fileId, mainItemId, subItemId])
+  }, [fileId])
 
   return {
     messages,

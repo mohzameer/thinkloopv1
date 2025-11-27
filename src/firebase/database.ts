@@ -772,19 +772,17 @@ export const deleteNote = async (
 }
 
 // ============================================================================
-// CONVERSATION/MESSAGE OPERATIONS (per sub-item/variation)
+// CONVERSATION/MESSAGE OPERATIONS (per file)
 // ============================================================================
 
 /**
- * Get all messages for a sub-item (variation)
+ * Get all messages for a file
  */
-export const getSubItemMessages = async (
-  fileId: string,
-  mainItemId: string,
-  subItemId: string
+export const getFileMessages = async (
+  fileId: string
 ): Promise<Array<{ id: string; data: Message }>> => {
   try {
-    const messagesRef = collection(db, 'files', fileId, 'mainItems', mainItemId, 'subItems', subItemId, 'messages')
+    const messagesRef = collection(db, 'files', fileId, 'messages')
     const q = query(messagesRef, orderBy('createdAt', 'asc'))
     const snapshot = await getDocs(q)
 
@@ -802,17 +800,28 @@ export const getSubItemMessages = async (
 }
 
 /**
- * Create a new message for a sub-item
+ * Get all messages for a sub-item (variation) - DEPRECATED: kept for backward compatibility
+ * @deprecated Use getFileMessages instead
  */
-export const createMessage = async (
+export const getSubItemMessages = async (
   fileId: string,
   mainItemId: string,
-  subItemId: string,
+  subItemId: string
+): Promise<Array<{ id: string; data: Message }>> => {
+  // Redirect to file-level messages
+  return getFileMessages(fileId)
+}
+
+/**
+ * Create a new message for a file
+ */
+export const createFileMessage = async (
+  fileId: string,
   role: 'user' | 'assistant',
   content: string
 ): Promise<string> => {
   try {
-    const messageRef = doc(collection(db, 'files', fileId, 'mainItems', mainItemId, 'subItems', subItemId, 'messages'))
+    const messageRef = doc(collection(db, 'files', fileId, 'messages'))
     
     await setDoc(messageRef, {
       role,
@@ -830,17 +839,39 @@ export const createMessage = async (
 }
 
 /**
- * Create the initial welcome message for a new variation
+ * Create a new message for a sub-item - DEPRECATED: kept for backward compatibility
+ * @deprecated Use createFileMessage instead
+ */
+export const createMessage = async (
+  fileId: string,
+  mainItemId: string,
+  subItemId: string,
+  role: 'user' | 'assistant',
+  content: string
+): Promise<string> => {
+  // Redirect to file-level messages
+  return createFileMessage(fileId, role, content)
+}
+
+/**
+ * Create the initial welcome message for a file (only if no messages exist)
  */
 const createWelcomeMessage = async (
   fileId: string,
-  mainItemId: string,
-  subItemId: string
+  mainItemId?: string,
+  subItemId?: string
 ): Promise<void> => {
   try {
+    // Check if file already has messages
+    const existingMessages = await getFileMessages(fileId)
+    if (existingMessages.length > 0) {
+      // File already has messages, don't create welcome message
+      return
+    }
+
     const welcomeMessage = "Hey! Ready to dive into your new idea? I can help you tweak the drawings, dig deep into what you've got here, or run some quick simulations to see how things play out. What's on your mind?"
-    await createMessage(fileId, mainItemId, subItemId, 'assistant', welcomeMessage)
-    console.log('[Database] Welcome message created for variation:', subItemId)
+    await createFileMessage(fileId, 'assistant', welcomeMessage)
+    console.log('[Database] Welcome message created for file:', fileId)
   } catch (error) {
     console.error('[Database] Error creating welcome message:', error)
     // Don't throw - welcome message failure shouldn't break variation creation
@@ -850,15 +881,13 @@ const createWelcomeMessage = async (
 /**
  * Update a message's content
  */
-export const updateMessage = async (
+export const updateFileMessage = async (
   fileId: string,
-  mainItemId: string,
-  subItemId: string,
   messageId: string,
   content: string
 ): Promise<void> => {
   try {
-    const messageRef = doc(db, 'files', fileId, 'mainItems', mainItemId, 'subItems', subItemId, 'messages', messageId)
+    const messageRef = doc(db, 'files', fileId, 'messages', messageId)
     await updateDoc(messageRef, {
       content,
       updatedAt: serverTimestamp()
@@ -871,7 +900,40 @@ export const updateMessage = async (
 }
 
 /**
+ * Update a message's content - DEPRECATED: kept for backward compatibility
+ * @deprecated Use updateFileMessage instead
+ */
+export const updateMessage = async (
+  fileId: string,
+  mainItemId: string,
+  subItemId: string,
+  messageId: string,
+  content: string
+): Promise<void> => {
+  // Redirect to file-level messages
+  return updateFileMessage(fileId, messageId, content)
+}
+
+/**
  * Delete a message
+ */
+export const deleteFileMessage = async (
+  fileId: string,
+  messageId: string
+): Promise<void> => {
+  try {
+    const messageRef = doc(db, 'files', fileId, 'messages', messageId)
+    await deleteDoc(messageRef)
+    console.log('[Database] Message deleted:', messageId)
+  } catch (error) {
+    console.error('[Database] Error deleting message:', error)
+    throw error
+  }
+}
+
+/**
+ * Delete a message - DEPRECATED: kept for backward compatibility
+ * @deprecated Use deleteFileMessage instead
  */
 export const deleteMessage = async (
   fileId: string,
@@ -879,13 +941,7 @@ export const deleteMessage = async (
   subItemId: string,
   messageId: string
 ): Promise<void> => {
-  try {
-    const messageRef = doc(db, 'files', fileId, 'mainItems', mainItemId, 'subItems', subItemId, 'messages', messageId)
-    await deleteDoc(messageRef)
-    console.log('[Database] Message deleted:', messageId)
-  } catch (error) {
-    console.error('[Database] Error deleting message:', error)
-    throw error
-  }
+  // Redirect to file-level messages
+  return deleteFileMessage(fileId, messageId)
 }
 

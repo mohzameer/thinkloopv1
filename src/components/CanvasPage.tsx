@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { flushSync } from 'react-dom'
-import { Box, Flex, ActionIcon, Stack, Loader, Text } from '@mantine/core'
+import { Box, Flex, ActionIcon, Stack, Loader, Text, LoadingOverlay } from '@mantine/core'
 import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react'
 import { addEdge, useNodesState, useEdgesState, Position, MarkerType, type Connection, type Node, type Edge, type OnSelectionChangeParams } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -13,7 +13,7 @@ import { useChat, type AIResponseData } from '../hooks/useChat'
 import type { Tag } from '../types/firebase'
 import { generateNodesAndEdges } from '../services/ai/nodeGenerator'
 import { isAddResponse, isUpdateResponse } from '../services/ai/responseParser'
-import { createMessage as createMessageInDb, updateFileLastViewed } from '../firebase/database'
+import { createFileMessage as createMessageInDb, updateFileLastViewed } from '../firebase/database'
 import { Header } from './canvas/Header'
 import { HierarchySidebar } from './canvas/HierarchySidebar'
 import { CanvasArea } from './canvas/CanvasArea'
@@ -58,6 +58,9 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
   // Pending AI drawing state
   const [pendingAIDrawing, setPendingAIDrawing] = useState<AIResponseData | null>(null)
+
+  // File creation loading state
+  const [isCreatingFile, setIsCreatingFile] = useState(false)
 
   // Firebase Hooks
   const { project, isLoading: projectLoading } = useProject(userId)
@@ -106,7 +109,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
     answerClarification,
     cancelClarification,
     refresh: refreshMessages
-  } = useChat(selectedFileId, selectedMainItemId, selectedSubItemId, {
+  } = useChat(selectedFileId, {
     nodes,
     edges,
     selectedNodeIds: selectedNodes.map(n => n.id),
@@ -1137,14 +1140,12 @@ function CanvasPage({ userId }: CanvasPageProps) {
       }
 
       // Save assistant message confirming the drawing
-      if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+      if (selectedFileId) {
         try {
           const confirmationMessage = aiResponse.response.explanation || 
             `Added ${generateResult.nodes.length} node(s)${generateResult.edges.length > 0 ? ` and ${generateResult.edges.length} edge(s)` : ''} to the canvas.`
           await createMessageInDb(
             selectedFileId,
-            selectedMainItemId,
-            selectedSubItemId,
             'assistant',
             confirmationMessage
           )
@@ -1156,12 +1157,10 @@ function CanvasPage({ userId }: CanvasPageProps) {
     } catch (error: any) {
       console.error('[CanvasPage] Error executing AI drawing:', error)
       // Save error message directly (without triggering AI)
-      if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+      if (selectedFileId) {
         try {
           await createMessageInDb(
             selectedFileId,
-            selectedMainItemId,
-            selectedSubItemId,
             'assistant',
             `Error adding nodes: ${error.message || 'Unknown error'}`
           )
@@ -1171,7 +1170,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
         }
       }
     }
-  }, [nodes, edges, nodeIdCounter, setNodes, setEdges, setNodeIdCounter, selectedFileId, selectedMainItemId, selectedSubItemId, refreshMessages])
+  }, [nodes, edges, nodeIdCounter, setNodes, setEdges, setNodeIdCounter, selectedFileId, refreshMessages])
 
   // Handle UPDATE response - ask for permission before updating nodes
   const handleUpdateResponse = useCallback(async (aiResponse: AIResponseData) => {
@@ -1204,12 +1203,10 @@ function CanvasPage({ userId }: CanvasPageProps) {
       permissionMessage += `\n${aiResponse.response.explanation || ''}\n\nWould you like me to proceed? (Reply "yes" to confirm or "no" to cancel)`
 
       // Save permission request message (without triggering AI)
-      if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+      if (selectedFileId) {
         try {
           await createMessageInDb(
             selectedFileId,
-            selectedMainItemId,
-            selectedSubItemId,
             'assistant',
             permissionMessage
           )
@@ -1221,7 +1218,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
     } catch (error) {
       console.error('[CanvasPage] Error handling UPDATE response:', error)
     }
-  }, [selectedFileId, selectedMainItemId, selectedSubItemId, refreshMessages])
+  }, [selectedFileId, refreshMessages])
 
   // Execute AI update (actually update node labels on canvas)
   const executeAIUpdate = useCallback(async (aiResponse: AIResponseData) => {
@@ -1301,7 +1298,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
       }
 
       // Save assistant message confirming the update
-      if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+      if (selectedFileId) {
         try {
           const confirmationMessage = updateCount > 0
             ? `Updated ${updateCount} node label(s)${errors.length > 0 ? `. Some updates failed: ${errors.join(', ')}` : ''}.`
@@ -1309,8 +1306,6 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
           await createMessageInDb(
             selectedFileId,
-            selectedMainItemId,
-            selectedSubItemId,
             'assistant',
             confirmationMessage
           )
@@ -1322,7 +1317,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
     } catch (error) {
       console.error('[CanvasPage] Error executing AI update:', error)
     }
-  }, [nodes, setNodes, selectedFileId, selectedMainItemId, selectedSubItemId, refreshMessages])
+  }, [nodes, setNodes, selectedFileId, refreshMessages])
 
   // Handle ADD response - ask for permission instead of immediately drawing
   const handleAddResponse = useCallback(async (aiResponse: AIResponseData) => {
@@ -1359,12 +1354,10 @@ function CanvasPage({ userId }: CanvasPageProps) {
       permissionMessage += ` to the canvas.\n\nWould you like me to proceed? (Reply "yes" to confirm or "no" to cancel)`
 
       // Save permission request message (without triggering AI)
-      if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+      if (selectedFileId) {
         try {
           await createMessageInDb(
             selectedFileId,
-            selectedMainItemId,
-            selectedSubItemId,
             'assistant',
             permissionMessage
           )
@@ -1376,12 +1369,10 @@ function CanvasPage({ userId }: CanvasPageProps) {
     } catch (error: any) {
       console.error('[CanvasPage] Error processing AI ADD response:', error)
       // Save error message directly (without triggering AI)
-      if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+      if (selectedFileId) {
         try {
           await createMessageInDb(
             selectedFileId,
-            selectedMainItemId,
-            selectedSubItemId,
             'assistant',
             `Error processing request: ${error.message || 'Unknown error'}`
           )
@@ -1391,7 +1382,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
         }
       }
     }
-  }, [selectedFileId, selectedMainItemId, selectedSubItemId, refreshMessages])
+  }, [selectedFileId, refreshMessages])
 
   // Handle sending chat message with AI response processing
   const handleSendMessage = useCallback(async (content: string) => {
@@ -1416,11 +1407,9 @@ function CanvasPage({ userId }: CanvasPageProps) {
       const actionType = isAddResponse(pendingAIDrawing.response) ? 'add those nodes' : 
                         isUpdateResponse(pendingAIDrawing.response) ? 'update those nodes' : 
                         'perform that action'
-      if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+      if (selectedFileId) {
         await createMessageInDb(
           selectedFileId,
-          selectedMainItemId,
-          selectedSubItemId,
           'assistant',
           `Understood. I won't ${actionType}. How else can I help?`
         )
@@ -1442,7 +1431,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
     }
 
     return result.messageId
-  }, [sendChatMessage, pendingAIDrawing, executeAIDrawing, executeAIUpdate, handleAddResponse, handleUpdateResponse, selectedFileId, selectedMainItemId, selectedSubItemId, refreshMessages])
+  }, [sendChatMessage, pendingAIDrawing, executeAIDrawing, executeAIUpdate, handleAddResponse, handleUpdateResponse, selectedFileId, refreshMessages])
 
   // Handle clarification answer
   const handleAnswerClarification = useCallback(async (questionIndex: number, answer: string) => {
@@ -1468,10 +1457,15 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
   // File operation handlers
   const handleCreateFile = useCallback(async () => {
-    const fileId = await createFile('Untitled')
-    if (fileId) {
-      setSelectedFileId(fileId)
-      setFileExplorerOpened(false)
+    setIsCreatingFile(true)
+    try {
+      const fileId = await createFile('Untitled')
+      if (fileId) {
+        setSelectedFileId(fileId)
+        setFileExplorerOpened(false)
+      }
+    } finally {
+      setIsCreatingFile(false)
     }
   }, [createFile])
 
@@ -1537,6 +1531,35 @@ function CanvasPage({ userId }: CanvasPageProps) {
       style={{
         width: '100vw',
         height: '100vh',
+        position: 'relative'
+      }}
+    >
+      <LoadingOverlay
+        visible={isCreatingFile}
+        overlayProps={{ blur: 2 }}
+        loaderProps={{
+          children: (
+            <Stack align="center" gap="md">
+              <Loader size="lg" />
+              <Text size="lg" fw={500} c="dimmed">
+                Creating new idea...
+              </Text>
+            </Stack>
+          )
+        }}
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9999
+        }}
+      />
+    <Box
+      style={{
+        width: '100vw',
+        height: '100vh',
         backgroundColor: 'var(--bg-secondary)',
         display: 'flex',
         flexDirection: 'column',
@@ -1553,6 +1576,10 @@ function CanvasPage({ userId }: CanvasPageProps) {
         selectedFile={selectedFile}
         isSaving={isSaving}
         onOpenFileExplorer={() => setFileExplorerOpened(true)}
+        onCreateFile={handleCreateFile}
+        onRenameFile={async (fileId, newName) => {
+          await renameFile(fileId, newName)
+        }}
       />
 
       {/* Main content area with sidebar */}
@@ -1694,6 +1721,53 @@ function CanvasPage({ userId }: CanvasPageProps) {
             onSendMessage={handleSendMessage}
             onAnswerClarification={handleAnswerClarification}
             onCancelClarification={cancelClarification}
+            pendingAIDrawing={pendingAIDrawing}
+            onApplyDrawing={() => {
+              if (pendingAIDrawing) {
+                if (isAddResponse(pendingAIDrawing.response)) {
+                  executeAIDrawing(pendingAIDrawing)
+                } else if (isUpdateResponse(pendingAIDrawing.response)) {
+                  executeAIUpdate(pendingAIDrawing)
+                }
+                setPendingAIDrawing(null)
+              }
+            }}
+            onDuplicateDrawing={async () => {
+              if (pendingAIDrawing && selectedFileId && selectedMainItemId && selectedSubItemId) {
+                // First apply the drawing
+                if (isAddResponse(pendingAIDrawing.response)) {
+                  await executeAIDrawing(pendingAIDrawing)
+                } else if (isUpdateResponse(pendingAIDrawing.response)) {
+                  await executeAIUpdate(pendingAIDrawing)
+                }
+                
+                // Wait for auto-save to complete, then create duplicate
+                setTimeout(async () => {
+                  if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+                    await handleDuplicateSubItem(selectedMainItemId, selectedSubItemId)
+                    setPendingAIDrawing(null)
+                  }
+                }, 2000) // Wait 2 seconds for auto-save
+              }
+            }}
+            onBranchAsMain={async () => {
+              if (pendingAIDrawing && selectedFileId && selectedMainItemId && selectedSubItemId) {
+                // First apply the drawing
+                if (isAddResponse(pendingAIDrawing.response)) {
+                  await executeAIDrawing(pendingAIDrawing)
+                } else if (isUpdateResponse(pendingAIDrawing.response)) {
+                  await executeAIUpdate(pendingAIDrawing)
+                }
+                
+                // Wait for auto-save to complete, then branch as main
+                setTimeout(async () => {
+                  if (selectedFileId && selectedMainItemId && selectedSubItemId) {
+                    await handleBranchSubItem(selectedMainItemId, selectedSubItemId)
+                    setPendingAIDrawing(null)
+                  }
+                }, 2000) // Wait 2 seconds for auto-save
+              }
+            }}
           />
         </Box>
 
@@ -1735,6 +1809,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
         onSaveFileName={handleSaveFileName}
         onCancelEdit={handleCancelFileEdit}
       />
+    </Box>
     </Box>
   )
 }
