@@ -521,6 +521,18 @@ function CanvasPage({ userId }: CanvasPageProps) {
   const getNodeDimensions = useCallback((nodeType: string, label?: string): { width: number; height: number } => {
     switch (nodeType) {
       case 'circle':
+        // Estimate circle size based on text content
+        // Padding: 20px on each side = 40px total
+        // Estimate: ~8px per character for width, consider line breaks
+        if (label) {
+          const lines = label.split('\n')
+          const maxLineLength = Math.max(...lines.map(line => line.length))
+          const estimatedWidth = Math.max(80, maxLineLength * 8 + 40) // min 80px, add padding
+          const estimatedHeight = Math.max(80, lines.length * 16 + 40) // ~16px per line, add padding
+          // For a circle, use the larger dimension to ensure it fits
+          const diameter = Math.max(estimatedWidth, estimatedHeight)
+          return { width: diameter, height: diameter }
+        }
         return { width: 100, height: 100 }
       case 'rectangle':
         // Estimate width based on label length (rough estimate: 8px per character + padding)

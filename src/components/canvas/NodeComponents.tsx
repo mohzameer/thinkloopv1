@@ -113,26 +113,24 @@ export const CircleNode = ({ id, data, selected }: NodeProps) => {
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
       <div
         style={{
-          minWidth: '80px',
-          minHeight: '80px',
-          width: 'fit-content',
-          height: 'fit-content',
           borderRadius: '50%',
           border: `2px solid ${data.borderColor || 'var(--node-border)'}`,
           backgroundColor: 'var(--bg-primary)',
-          display: 'flex',
+          display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
           fontSize: '12px',
           fontWeight: 500,
           textAlign: 'center',
-          padding: '16px',
+          padding: '20px',
           position: 'relative',
           boxShadow: selected ? '0 0 0 3px rgba(220, 38, 38, 0.3)' : 'none',
           transition: 'all 0.3s ease',
           color: 'var(--text-primary)',
-          aspectRatio: '1',
-          maxWidth: '300px'
+          minWidth: '80px',
+          minHeight: '80px',
+          maxWidth: '300px',
+          aspectRatio: '1'
         }}
       >
         <Handle type="target" position={Position.Top} id="top-target" />
@@ -153,44 +151,60 @@ export const CircleNode = ({ id, data, selected }: NodeProps) => {
             <HandlePlusButton nodeId={id} position={Position.Right} onAddNode={data.onAddConnectedNode} />
           </>
         )}
-        {data.isEditing ? (
-          <div
-            onMouseDown={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <Textarea
-              value={data.label}
-              onChange={(e) => data.onLabelChange?.(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                  data.onEditingComplete?.()
-                } else if (e.key === 'Escape') {
-                  data.onEditingComplete?.()
-                }
-              }}
-              onBlur={data.onEditingComplete}
-              autoFocus
-              autosize
-              minRows={1}
-              maxRows={5}
-              styles={{
-                input: {
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  textAlign: 'center',
-                  padding: '4px',
-                  border: 'none',
-                  boxShadow: 'none',
-                  backgroundColor: 'var(--bg-primary)'
-                }
-              }}
-            />
-          </div>
-        ) : (
-          <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            {data.label}
-          </div>
-        )}
+        <div
+          style={{
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            overflowWrap: 'break-word',
+            maxWidth: '100%',
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '1em'
+          }}
+        >
+          {data.isEditing ? (
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              style={{ width: '100%' }}
+            >
+              <Textarea
+                value={data.label}
+                onChange={(e) => data.onLabelChange?.(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    data.onEditingComplete?.()
+                  } else if (e.key === 'Escape') {
+                    data.onEditingComplete?.()
+                  }
+                }}
+                onBlur={data.onEditingComplete}
+                autoFocus
+                autosize
+                minRows={1}
+                maxRows={5}
+                styles={{
+                  input: {
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    textAlign: 'center',
+                    padding: '4px',
+                    border: 'none',
+                    boxShadow: 'none',
+                    backgroundColor: 'var(--bg-primary)',
+                    width: '100%'
+                  }
+                }}
+              />
+            </div>
+          ) : (
+            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+              {data.label}
+            </div>
+          )}
+        </div>
       </div>
       {data.categories && data.categories.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
