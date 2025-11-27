@@ -421,7 +421,7 @@ export function NotesSidebar({
                       backgroundColor: message.role === 'user' ? 'var(--bg-secondary)' : 'white',
                       borderColor: 'var(--border-color)',
                       alignSelf: message.role === 'user' ? 'flex-end' : 'flex-start',
-                      maxWidth: '85%'
+                      maxWidth: message.role === 'assistant' ? '92%' : '85%'
                     }}
                   >
                     <Flex align="center" gap="xs" mb={8}>
@@ -567,7 +567,7 @@ export function NotesSidebar({
                           leftSection={<IconCheck size={14} />}
                           style={{ flex: 1 }}
                         >
-                          Apply Changes
+                          Apply
                         </Button>
                         <Button
                           size="xs"
@@ -575,9 +575,9 @@ export function NotesSidebar({
                           color="gray"
                           onClick={onDuplicateDrawing}
                           leftSection={<IconCopy size={14} />}
-                          style={{ flex: 1 }}
+                          style={{ flex: 1.3 }}
                         >
-                          Create Duplicate
+                          Duplicate
                         </Button>
                         <Button
                           size="xs"
@@ -587,7 +587,7 @@ export function NotesSidebar({
                           leftSection={<IconGitBranch size={14} />}
                           style={{ flex: 1 }}
                         >
-                          Branch as Main
+                          Branch
                         </Button>
                       </Group>
                     )}

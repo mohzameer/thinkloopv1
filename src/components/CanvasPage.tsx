@@ -1317,13 +1317,17 @@ function CanvasPage({ userId }: CanvasPageProps) {
       // Store pending update
       setPendingAIDrawing(aiResponse)
 
+      // Get current version name
+      const currentSubItem = currentMainItem?.subItems.find(s => s.id === selectedSubItemId)
+      const versionName = currentSubItem?.data.name || `V${variationIndex + 1}`
+
       // Build permission request message
       const updateDescriptions = aiResponse.response.nodeUpdates.map(update => {
         const identifier = update.nodeId || update.nodeLabel || 'Unknown'
         return `"${identifier}" → "${update.newLabel}"`
       })
       
-      let permissionMessage = `I can update ${aiResponse.response.nodeUpdates.length} node label(s):\n\n`
+      let permissionMessage = `I can update ${aiResponse.response.nodeUpdates.length} node label(s) in "${versionName}":\n\n`
       updateDescriptions.forEach((desc, idx) => {
         permissionMessage += `${idx + 1}. ${desc}\n`
       })
@@ -1345,7 +1349,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
     } catch (error) {
       console.error('[CanvasPage] Error handling UPDATE response:', error)
     }
-  }, [selectedFileId, refreshMessages])
+  }, [selectedFileId, refreshMessages, currentMainItem, selectedSubItemId, variationIndex])
 
   // Execute AI update (actually update node labels on canvas)
   const executeAIUpdate = useCallback(async (aiResponse: AIResponseData) => {
@@ -1464,6 +1468,10 @@ function CanvasPage({ userId }: CanvasPageProps) {
       // Store pending drawing
       setPendingAIDrawing(aiResponse)
 
+      // Get current version name
+      const currentSubItem = currentMainItem?.subItems.find(s => s.id === selectedSubItemId)
+      const versionName = currentSubItem?.data.name || `V${variationIndex + 1}`
+
       // Build permission request message
       const nodeLabels = aiResponse.response.nodes.map(n => n.label).filter(Boolean)
       const nodeCount = aiResponse.response.nodes.length
@@ -1478,7 +1486,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
       if (edgeCount > 0) {
         permissionMessage += ` and ${edgeCount} edge(s)`
       }
-      permissionMessage += ` to the canvas.\n\nWould you like me to proceed? (Reply "yes" to confirm or "no" to cancel)`
+      permissionMessage += ` to the canvas in "${versionName}".\n\nWould you like me to proceed? (Reply "yes" to confirm or "no" to cancel)`
 
       // Save permission request message (without triggering AI)
       if (selectedFileId) {
@@ -1509,7 +1517,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
         }
       }
     }
-  }, [selectedFileId, refreshMessages])
+  }, [selectedFileId, refreshMessages, currentMainItem, selectedSubItemId, variationIndex])
 
   // Handle sending chat message with AI response processing
   const handleSendMessage = useCallback(async (content: string) => {
@@ -1871,50 +1879,65 @@ function CanvasPage({ userId }: CanvasPageProps) {
             onAnswerClarification={handleAnswerClarification}
             onCancelClarification={cancelClarification}
             pendingAIDrawing={pendingAIDrawing}
-            onApplyDrawing={() => {
+            onApplyDrawing={async () => {
               if (pendingAIDrawing) {
-                if (isAddResponse(pendingAIDrawing.response)) {
-                  executeAIDrawing(pendingAIDrawing)
-                } else if (isUpdateResponse(pendingAIDrawing.response)) {
-                  executeAIUpdate(pendingAIDrawing)
-                }
+                // Clear pending drawing immediately to disable buttons
+                const aiResponse = pendingAIDrawing
                 setPendingAIDrawing(null)
+                
+                if (isAddResponse(aiResponse.response)) {
+                  await executeAIDrawing(aiResponse)
+                } else if (isUpdateResponse(aiResponse.response)) {
+                  await executeAIUpdate(aiResponse)
+                }
               }
             }}
             onDuplicateDrawing={async () => {
               if (pendingAIDrawing && selectedFileId && selectedMainItemId && selectedSubItemId) {
-                // First apply the drawing
-                if (isAddResponse(pendingAIDrawing.response)) {
-                  await executeAIDrawing(pendingAIDrawing)
-                } else if (isUpdateResponse(pendingAIDrawing.response)) {
-                  await executeAIUpdate(pendingAIDrawing)
-                }
+                // Clear pending drawing immediately to disable buttons
+                const aiResponse = pendingAIDrawing
+                setPendingAIDrawing(null)
                 
-                // Wait for auto-save to complete, then create duplicate
+                // First duplicate the current state (before applying changes)
+                // This creates v2 with the current state (without the pending changes)
+                await handleDuplicateSubItem(selectedMainItemId, selectedSubItemId)
+                
+                // Wait a bit for the duplicate to complete and switch to the new sub-item
                 setTimeout(async () => {
                   if (selectedFileId && selectedMainItemId && selectedSubItemId) {
-                    await handleDuplicateSubItem(selectedMainItemId, selectedSubItemId)
-                    setPendingAIDrawing(null)
+                    // Now apply the changes to the new duplicated sub-item (v2)
+                    // The selectedSubItemId should now be the new duplicate
+                    if (isAddResponse(aiResponse.response)) {
+                      await executeAIDrawing(aiResponse)
+                    } else if (isUpdateResponse(aiResponse.response)) {
+                      await executeAIUpdate(aiResponse)
+                    }
                   }
-                }, 2000) // Wait 2 seconds for auto-save
+                }, 1000) // Wait for duplicate to complete and switch
               }
             }}
             onBranchAsMain={async () => {
               if (pendingAIDrawing && selectedFileId && selectedMainItemId && selectedSubItemId) {
-                // First apply the drawing
-                if (isAddResponse(pendingAIDrawing.response)) {
-                  await executeAIDrawing(pendingAIDrawing)
-                } else if (isUpdateResponse(pendingAIDrawing.response)) {
-                  await executeAIUpdate(pendingAIDrawing)
-                }
+                // Clear pending drawing immediately to disable buttons
+                const aiResponse = pendingAIDrawing
+                setPendingAIDrawing(null)
                 
-                // Wait for auto-save to complete, then branch as main
+                // First branch the current state (before applying changes)
+                // This creates a new main item with the current state (without the pending changes)
+                await handleBranchSubItem(selectedMainItemId, selectedSubItemId)
+                
+                // Wait a bit for the branch to complete and switch to the new main item
                 setTimeout(async () => {
                   if (selectedFileId && selectedMainItemId && selectedSubItemId) {
-                    await handleBranchSubItem(selectedMainItemId, selectedSubItemId)
-                    setPendingAIDrawing(null)
+                    // Now apply the changes to the new branched main item
+                    // The selectedMainItemId and selectedSubItemId should now be the new branch
+                    if (isAddResponse(aiResponse.response)) {
+                      await executeAIDrawing(aiResponse)
+                    } else if (isUpdateResponse(aiResponse.response)) {
+                      await executeAIUpdate(aiResponse)
+                    }
                   }
-                }, 2000) // Wait 2 seconds for auto-save
+                }, 1000) // Wait for branch to complete and switch
               }
             }}
           />

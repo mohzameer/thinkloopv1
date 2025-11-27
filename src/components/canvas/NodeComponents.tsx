@@ -1,5 +1,5 @@
 import { Textarea, ActionIcon, Popover, Stack, Button } from '@mantine/core'
-import { Handle, Position, type NodeTypes, useEdges, useNodes } from '@xyflow/react'
+import { Handle, Position, type NodeTypes } from '@xyflow/react'
 import { IconPlus, IconSquare, IconCircle } from '@tabler/icons-react'
 import { useState } from 'react'
 import type { Tag } from '../../types/firebase'
@@ -22,7 +22,7 @@ interface NodeProps {
   selected?: boolean
 }
 
-// Plus button component for unconnected handles
+// Plus button component for all connection sides
 const HandlePlusButton = ({ 
   nodeId, 
   position, 
@@ -33,101 +33,9 @@ const HandlePlusButton = ({
   onAddNode?: (nodeId: string, handlePosition: Position, nodeType: string) => void
 }) => {
   const [popoverOpened, setPopoverOpened] = useState(false)
-  const edges = useEdges()
-  const nodes = useNodes()
   
-  // Check if this handle position is connected
-  const positionLower = position.toLowerCase()
-  
-  // Check if this node has ANY edges without handle specifications
-  // For these old manually-created edges, we can't reliably detect which sides are connected
-  // because React Flow's automatic routing doesn't match our position-based inference
-  const hasEdgeWithoutHandles = edges.some(edge => {
-    if (edge.source === nodeId && !edge.sourceHandle) return true
-    if (edge.target === nodeId && !edge.targetHandle) return true
-    return false
-  })
-  
-  // If there are edges without handles, hide ALL plus buttons on this node (safest approach)
-  if (hasEdgeWithoutHandles) return null
-  
-  // Get current node position
-  const currentNode = nodes.find(n => n.id === nodeId)
-  
-  // Helper to infer handle position based on node positions (for old edges without handles)
-  const inferHandlePosition = (sourceId: string, targetId: string, isSource: boolean): Position => {
-    const sourceNode = nodes.find(n => n.id === sourceId)
-    const targetNode = nodes.find(n => n.id === targetId)
-    if (!sourceNode || !targetNode) return Position.Right
-    
-    const dx = targetNode.position.x - sourceNode.position.x
-    const dy = targetNode.position.y - sourceNode.position.y
-    
-    // Determine which side based on relative position
-    let position: Position
-    if (Math.abs(dx) > Math.abs(dy)) {
-      // Horizontal connection
-      position = dx > 0 ? Position.Right : Position.Left
-    } else {
-      // Vertical connection
-      position = dy > 0 ? Position.Bottom : Position.Top
-    }
-    
-    // If this is the target node, return the opposite side
-    if (!isSource) {
-      const opposites: Record<Position, Position> = {
-        [Position.Top]: Position.Bottom,
-        [Position.Bottom]: Position.Top,
-        [Position.Left]: Position.Right,
-        [Position.Right]: Position.Left
-      }
-      position = opposites[position]
-    }
-    
-    return position
-  }
-  
-  // Get all edges connected to this node at this position
-  const connectedEdges = edges.filter(edge => {
-    // Check if this node is the source
-    if (edge.source === nodeId) {
-      // If sourceHandle is specified, check if it matches
-      if (edge.sourceHandle) {
-        if (edge.sourceHandle.includes(positionLower)) {
-          return true
-        }
-      } else {
-        // No handle specified - infer from positions
-        const inferredPosition = inferHandlePosition(edge.source, edge.target, true)
-        if (inferredPosition === position) {
-          return true
-        }
-      }
-    }
-    
-    // Check if this node is the target
-    if (edge.target === nodeId) {
-      // If targetHandle is specified, check if it matches
-      if (edge.targetHandle) {
-        if (edge.targetHandle.includes(positionLower)) {
-          return true
-        }
-      } else {
-        // No handle specified - infer from positions
-        const inferredPosition = inferHandlePosition(edge.source, edge.target, false)
-        if (inferredPosition === position) {
-          return true
-        }
-      }
-    }
-    
-    return false
-  })
-  
-  const isConnected = connectedEdges.length > 0
-  
-  // Only show if not connected and callback exists
-  if (isConnected || !onAddNode) return null
+  // Only show if callback exists
+  if (!onAddNode) return null
 
   const handleAddNodeClick = (nodeType: string) => {
     onAddNode(nodeId, position, nodeType)
