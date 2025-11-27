@@ -518,10 +518,17 @@ function CanvasPage({ userId }: CanvasPageProps) {
   )
 
   const addNode = useCallback((nodeType: 'rectangle' | 'circle') => {
+    // Count existing nodes of the same type to get the next number
+    const existingCount = nodes.filter(n => n.type === nodeType).length
+    const nodeNumber = existingCount + 1
+    const nodeLabel = nodeType === 'circle' 
+      ? `Thinking Node ${nodeNumber}`
+      : `Idea Node ${nodeNumber}`
+    
     const newNode: Node = {
       id: `${nodeIdCounter}`,
       type: nodeType,
-      data: { label: `${nodeType === 'circle' ? 'Circle' : 'Rectangle'} ${nodeIdCounter}` },
+      data: { label: nodeLabel },
       position: {
         x: Math.random() * 400 + 100,
         y: Math.random() * 300 + 100
@@ -529,7 +536,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
     }
     setNodes((nds) => [...nds, newNode])
     setNodeIdCounter((id) => id + 1)
-  }, [nodeIdCounter, setNodes])
+  }, [nodeIdCounter, nodes, setNodes])
 
   const clearCanvas = useCallback(() => {
     setNodes([])
@@ -557,21 +564,21 @@ function CanvasPage({ userId }: CanvasPageProps) {
 
   // Add connected node from an unconnected handle
   const addConnectedNode = useCallback((sourceNodeId: string, handlePosition: Position, nodeType: string) => {
-    // Create a label based on node type
-    const labelMap: Record<string, string> = {
-      rectangle: 'Rectangle',
-      circle: 'Circle'
-    }
-
     // Use functional update to avoid dependency on nodes
     setNodes((currentNodes) => {
       // Get the source node to calculate position
       const sourceNode = currentNodes.find(n => n.id === sourceNodeId)
       if (!sourceNode) return currentNodes
 
+      // Count existing nodes of the same type to get the next number
+      const existingCount = currentNodes.filter(n => n.type === nodeType).length
+      const nodeNumber = existingCount + 1
+      const newNodeLabel = nodeType === 'circle'
+        ? `Thinking Node ${nodeNumber}`
+        : `Idea Node ${nodeNumber}`
+
       // Get dimensions of source and new node
       const sourceDims = getNodeDimensions(sourceNode.type || 'rectangle', sourceNode.data?.label)
-      const newNodeLabel = `${labelMap[nodeType] || 'Node'} ${nodeIdCounter}`
       const newDims = getNodeDimensions(nodeType, newNodeLabel)
 
       // Calculate center of source node
@@ -942,7 +949,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
     try {
       // Get count of main items to name the new one
       const count = mainItems.length
-      const newMainItemName = `Main ${count + 1}`
+      const newMainItemName = `Exploration ${count + 1}`
 
       const result = await promoteToMain(mainItemId, subItemId, newMainItemName)
       if (result) {

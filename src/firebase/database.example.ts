@@ -57,7 +57,7 @@ async function example2_CreateFile(projectId: string, userId: string) {
   const fileId = await createFile(projectId, userId, 'My First Post')
   
   console.log('File created:', fileId)
-  // A default main item "Main" with sub-item "Var 1" is automatically created
+  // A default main item "Exploration" with sub-item "Var 1" is automatically created
   
   return fileId
 }

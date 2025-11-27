@@ -188,7 +188,7 @@ export const createFile = async (
     console.log('[Database] File created:', fileRef.id)
 
     // Create default main item with default sub-item
-    await createMainItemWithDefaultSubItem(fileRef.id, 'Main')
+    await createMainItemWithDefaultSubItem(fileRef.id, 'Exploration')
 
     // Create welcome message for the new file
     await createWelcomeMessage(fileRef.id)

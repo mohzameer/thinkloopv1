@@ -292,7 +292,7 @@ export const CanvasArea = ({
             size="lg"
             variant="transparent"
             disabled
-            title="Rectangle"
+            title="Idea Node"
             style={{ color: 'var(--text-tertiary)' }}
           >
             <IconSquare size={20} stroke={1.5} />
@@ -301,7 +301,7 @@ export const CanvasArea = ({
             size="lg"
             variant="transparent"
             disabled
-            title="Circle"
+            title="Thinking Node"
             style={{ color: 'var(--text-tertiary)' }}
           >
             <IconCircle size={20} stroke={1.5} />
@@ -445,7 +445,7 @@ export const CanvasArea = ({
           size="lg"
           variant="transparent"
           onClick={() => onAddNode('rectangle')}
-          title="Add Rectangle"
+          title="Add Idea Node"
           style={{ color: 'var(--text-primary)' }}
         >
           <IconSquare size={20} stroke={1.5} />
@@ -454,7 +454,7 @@ export const CanvasArea = ({
           size="lg"
           variant="transparent"
           onClick={() => onAddNode('circle')}
-          title="Add Circle"
+          title="Add Thinking Node"
           style={{ color: 'var(--text-primary)' }}
         >
           <IconCircle size={20} stroke={1.5} />

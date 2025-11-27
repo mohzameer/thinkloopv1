@@ -180,7 +180,7 @@ const HandlePlusButton = ({
               onClick={() => handleAddNodeClick('rectangle')}
               fullWidth
             >
-              Rectangle
+              Idea Node
             </Button>
             <Button
               size="xs"
@@ -189,7 +189,7 @@ const HandlePlusButton = ({
               onClick={() => handleAddNodeClick('circle')}
               fullWidth
             >
-              Circle
+              Thinking Node
             </Button>
           </Stack>
         </Popover.Dropdown>
