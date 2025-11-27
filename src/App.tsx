@@ -1,4 +1,5 @@
 import './App.css'
+import { Routes, Route } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import CanvasPage from './components/CanvasPage'
 import { Box, Loader, Text, Stack } from '@mantine/core'
@@ -32,7 +33,12 @@ function App() {
 
   // Once authenticated (anonymous or registered), show the main app
   if (userId) {
-    return <CanvasPage userId={userId} />
+    return (
+      <Routes>
+        <Route path="/" element={<CanvasPage userId={userId} />} />
+        <Route path="/:fileId" element={<CanvasPage userId={userId} />} />
+      </Routes>
+    )
   }
 
   // Fallback (should rarely reach here)

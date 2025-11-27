@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { flushSync } from 'react-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { Box, Flex, ActionIcon, Stack, Loader, Text, LoadingOverlay } from '@mantine/core'
 import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react'
 import { addEdge, useNodesState, useEdgesState, Position, MarkerType, type Connection, type Node, type Edge, type OnSelectionChangeParams } from '@xyflow/react'
@@ -14,6 +15,7 @@ import type { Tag } from '../types/firebase'
 import { generateNodesAndEdges } from '../services/ai/nodeGenerator'
 import { isAddResponse, isUpdateResponse } from '../services/ai/responseParser'
 import { createFileMessage as createMessageInDb, updateFileLastViewed } from '../firebase/database'
+import { generateShortId, findFileIdByShortId } from '../utils/fileIdUtils'
 import { Header } from './canvas/Header'
 import { HierarchySidebar } from './canvas/HierarchySidebar'
 import { CanvasArea } from './canvas/CanvasArea'
@@ -25,6 +27,10 @@ interface CanvasPageProps {
 }
 
 function CanvasPage({ userId }: CanvasPageProps) {
+  // Router hooks
+  const { fileId: urlFileId } = useParams<{ fileId?: string }>()
+  const navigate = useNavigate()
+
   // UI State
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
@@ -185,12 +191,34 @@ function CanvasPage({ userId }: CanvasPageProps) {
     }
   }, [selectedNodes, isTagPopupOpen])
 
-  // Auto-select first file when files load (only if files exist)
+  // Handle URL-based file selection
   useEffect(() => {
-    if (files.length > 0 && !selectedFileId) {
-      setSelectedFileId(files[0].id)
+    if (files.length === 0) return // Wait for files to load
+
+    if (urlFileId) {
+      // Convert short ID from URL to full file ID
+      const fullFileId = findFileIdByShortId(urlFileId, files)
+      if (fullFileId && fullFileId !== selectedFileId) {
+        setSelectedFileId(fullFileId)
+      } else if (!fullFileId) {
+        // Invalid file ID in URL, redirect to first file or home
+        if (files.length > 0) {
+          const firstFileId = files[0].id
+          setSelectedFileId(firstFileId)
+          navigate(`/${generateShortId(firstFileId)}`, { replace: true })
+        } else {
+          navigate('/', { replace: true })
+        }
+      }
+    } else {
+      // No file in URL, auto-select first file and update URL
+      if (files.length > 0 && !selectedFileId) {
+        const firstFileId = files[0].id
+        setSelectedFileId(firstFileId)
+        navigate(`/${generateShortId(firstFileId)}`, { replace: true })
+      }
     }
-  }, [files, selectedFileId])
+  }, [urlFileId, files, selectedFileId, navigate])
 
   // Track previous file ID to detect file changes
   const previousFileIdRef = useRef<string | null>(null)
@@ -1462,17 +1490,19 @@ function CanvasPage({ userId }: CanvasPageProps) {
       const fileId = await createFile('Untitled')
       if (fileId) {
         setSelectedFileId(fileId)
+        navigate(`/${generateShortId(fileId)}`)
         setFileExplorerOpened(false)
       }
     } finally {
       setIsCreatingFile(false)
     }
-  }, [createFile])
+  }, [createFile, navigate])
 
   const handleFileSelect = useCallback((fileId: string) => {
     setSelectedFileId(fileId)
+    navigate(`/${generateShortId(fileId)}`)
     setFileExplorerOpened(false)
-  }, [])
+  }, [navigate])
 
   const handleFileDoubleClick = useCallback((fileId: string, currentName: string) => {
     setEditingFileId(fileId)
@@ -1499,13 +1529,16 @@ function CanvasPage({ userId }: CanvasPageProps) {
         // If we deleted the currently selected file, select another one or clear selection
         const remainingFiles = files.filter(f => f.id !== fileId)
         if (remainingFiles.length > 0) {
-          setSelectedFileId(remainingFiles[0].id)
+          const newFileId = remainingFiles[0].id
+          setSelectedFileId(newFileId)
+          navigate(`/${generateShortId(newFileId)}`)
         } else {
           setSelectedFileId(null)
+          navigate('/')
         }
       }
     }
-  }, [deleteFile, selectedFileId, files])
+  }, [deleteFile, selectedFileId, files, navigate])
 
   // Show loading state
   if (projectLoading || filesLoading) {
