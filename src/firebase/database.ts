@@ -190,6 +190,9 @@ export const createFile = async (
     // Create default main item with default sub-item
     await createMainItemWithDefaultSubItem(fileRef.id, 'Main')
 
+    // Create welcome message for the new file
+    await createWelcomeMessage(fileRef.id)
+
     return fileRef.id
   } catch (error) {
     console.error('[Database] Error creating file:', error)
@@ -596,8 +599,7 @@ export const duplicateSubItemAsMainItem = async (
       parentSubItemId: sourceSubItemId
     })
 
-    // Create welcome message for the new variation
-    await createWelcomeMessage(fileId, result.mainItemId, result.subItemId)
+    // Note: Welcome message is now per-file, created when file is first created
 
     console.log('[Database] Sub-item duplicated as main item:', result.mainItemId)
     return result
@@ -632,8 +634,7 @@ export const branchSubItem = async (
       sourceSubItemId
     )
 
-    // Create welcome message for the new variation
-    await createWelcomeMessage(fileId, mainItemId, newSubItemId)
+    // Note: Welcome message is now per-file, created when file is first created
 
     console.log('[Database] Sub-item branched:', newSubItemId)
     return newSubItemId
@@ -856,10 +857,8 @@ export const createMessage = async (
 /**
  * Create the initial welcome message for a file (only if no messages exist)
  */
-const createWelcomeMessage = async (
-  fileId: string,
-  mainItemId?: string,
-  subItemId?: string
+export const createWelcomeMessage = async (
+  fileId: string
 ): Promise<void> => {
   try {
     // Check if file already has messages
@@ -874,7 +873,7 @@ const createWelcomeMessage = async (
     console.log('[Database] Welcome message created for file:', fileId)
   } catch (error) {
     console.error('[Database] Error creating welcome message:', error)
-    // Don't throw - welcome message failure shouldn't break variation creation
+    // Don't throw - welcome message failure shouldn't break file creation
   }
 }
 

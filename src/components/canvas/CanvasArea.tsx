@@ -53,6 +53,7 @@ interface CanvasAreaProps {
   onNoteClose: () => void
   selectedNoteIdFromSidebar?: string | null
   onCanvasClick?: () => void
+  editingNodeId?: string | null
 }
 
 export const CanvasArea = ({
@@ -86,7 +87,8 @@ export const CanvasArea = ({
   onNoteClick,
   onNoteClose,
   selectedNoteIdFromSidebar,
-  onCanvasClick
+  onCanvasClick,
+  editingNodeId
 }: CanvasAreaProps) => {
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null)
   const [viewportUpdated, setViewportUpdated] = useState(0)
@@ -387,7 +389,7 @@ export const CanvasArea = ({
               event.stopPropagation()
             }
           }}
-          panOnDrag={!isAddNoteMode}
+          panOnDrag={!isAddNoteMode && !editingNodeId}
           panOnScroll={!isAddNoteMode}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}

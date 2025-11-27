@@ -209,7 +209,7 @@ export const CircleNode = ({ id, data, selected }: NodeProps) => {
           height: '100px',
           borderRadius: '50%',
           border: `2px solid ${data.borderColor || 'var(--node-border)'}`,
-          backgroundColor: 'transparent',
+          backgroundColor: 'var(--bg-primary)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -232,8 +232,8 @@ export const CircleNode = ({ id, data, selected }: NodeProps) => {
         <Handle type="target" position={Position.Right} id="right-target" />
         <Handle type="source" position={Position.Right} id="right-source" />
         
-        {/* Plus buttons for unconnected handles - only show when selected */}
-        {selected && (
+        {/* Plus buttons for unconnected handles - only show when selected and not editing */}
+        {selected && !data.isEditing && (
           <>
             <HandlePlusButton nodeId={id} position={Position.Top} onAddNode={data.onAddConnectedNode} />
             <HandlePlusButton nodeId={id} position={Position.Bottom} onAddNode={data.onAddConnectedNode} />
@@ -269,7 +269,7 @@ export const CircleNode = ({ id, data, selected }: NodeProps) => {
                   padding: '4px',
                   border: 'none',
                   boxShadow: 'none',
-                  backgroundColor: 'transparent'
+                  backgroundColor: 'var(--bg-primary)'
                 }
               }}
             />
@@ -314,7 +314,7 @@ export const RectangleNode = ({ id, data, selected }: NodeProps) => {
           padding: '10px 20px',
           borderRadius: '3px',
           border: `2px solid ${data.borderColor || 'var(--node-border)'}`,
-          backgroundColor: 'transparent',
+          backgroundColor: 'var(--bg-primary)',
           fontSize: '12px',
           fontWeight: 500,
           position: 'relative',
@@ -332,8 +332,8 @@ export const RectangleNode = ({ id, data, selected }: NodeProps) => {
         <Handle type="target" position={Position.Right} id="right-target" />
         <Handle type="source" position={Position.Right} id="right-source" />
         
-        {/* Plus buttons for unconnected handles - only show when selected */}
-        {selected && (
+        {/* Plus buttons for unconnected handles - only show when selected and not editing */}
+        {selected && !data.isEditing && (
           <>
             <HandlePlusButton nodeId={id} position={Position.Top} onAddNode={data.onAddConnectedNode} />
             <HandlePlusButton nodeId={id} position={Position.Bottom} onAddNode={data.onAddConnectedNode} />
@@ -345,6 +345,9 @@ export const RectangleNode = ({ id, data, selected }: NodeProps) => {
           <div
             onMouseDown={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
+            onDragStart={(e) => e.preventDefault()}
+            onMouseMove={(e) => e.stopPropagation()}
+            style={{ userSelect: 'text' }}
           >
             <Textarea
               value={data.label}
@@ -368,7 +371,7 @@ export const RectangleNode = ({ id, data, selected }: NodeProps) => {
                   padding: '4px',
                   border: 'none',
                   boxShadow: 'none',
-                  backgroundColor: 'transparent'
+                  backgroundColor: 'var(--bg-primary)'
                 }
               }}
             />
@@ -422,7 +425,7 @@ export const DiamondNode = ({ id, data, selected }: NodeProps) => {
             transform: 'rotate(45deg)',
             transformOrigin: 'center',
             border: `2px solid ${data.borderColor || 'var(--node-border)'}`,
-            backgroundColor: 'transparent',
+            backgroundColor: 'var(--bg-primary)',
             position: 'absolute',
             top: '50%',
             left: '50%',
@@ -455,6 +458,9 @@ export const DiamondNode = ({ id, data, selected }: NodeProps) => {
             <div
               onMouseDown={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
+              onDragStart={(e) => e.preventDefault()}
+              onMouseMove={(e) => e.stopPropagation()}
+              style={{ userSelect: 'text' }}
             >
               <Textarea
                 value={data.label}
@@ -479,7 +485,7 @@ export const DiamondNode = ({ id, data, selected }: NodeProps) => {
                     padding: '4px',
                     border: 'none',
                     boxShadow: 'none',
-                    backgroundColor: 'transparent'
+                    backgroundColor: 'var(--bg-primary)'
                   }
                 }}
               />
@@ -499,8 +505,8 @@ export const DiamondNode = ({ id, data, selected }: NodeProps) => {
         <Handle type="target" position={Position.Right} id="right-target" />
         <Handle type="source" position={Position.Right} id="right-source" />
         
-        {/* Plus buttons for unconnected handles - only show when selected */}
-        {selected && (
+        {/* Plus buttons for unconnected handles - only show when selected and not editing */}
+        {selected && !data.isEditing && (
           <>
             <HandlePlusButton nodeId={id} position={Position.Top} onAddNode={data.onAddConnectedNode} />
             <HandlePlusButton nodeId={id} position={Position.Bottom} onAddNode={data.onAddConnectedNode} />
@@ -556,7 +562,7 @@ export const TriangleNode = ({ id, data, selected }: NodeProps) => {
         >
           <polygon
             points="50,10 90,85 10,85"
-            fill="transparent"
+            fill="var(--bg-primary)"
             stroke={data.borderColor || 'var(--node-border)'}
             strokeWidth="2"
             style={{
@@ -588,6 +594,9 @@ export const TriangleNode = ({ id, data, selected }: NodeProps) => {
             <div
               onMouseDown={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
+              onDragStart={(e) => e.preventDefault()}
+              onMouseMove={(e) => e.stopPropagation()}
+              style={{ userSelect: 'text' }}
             >
               <Textarea
                 value={data.label}
@@ -612,7 +621,7 @@ export const TriangleNode = ({ id, data, selected }: NodeProps) => {
                     padding: '4px',
                     border: 'none',
                     boxShadow: 'none',
-                    backgroundColor: 'transparent'
+                    backgroundColor: 'var(--bg-primary)'
                   }
                 }}
               />
@@ -632,8 +641,8 @@ export const TriangleNode = ({ id, data, selected }: NodeProps) => {
         <Handle type="target" position={Position.Right} id="right-target" />
         <Handle type="source" position={Position.Right} id="right-source" />
         
-        {/* Plus buttons for unconnected handles - only show when selected */}
-        {selected && (
+        {/* Plus buttons for unconnected handles - only show when selected and not editing */}
+        {selected && !data.isEditing && (
           <>
             <HandlePlusButton nodeId={id} position={Position.Top} onAddNode={data.onAddConnectedNode} />
             <HandlePlusButton nodeId={id} position={Position.Bottom} onAddNode={data.onAddConnectedNode} />

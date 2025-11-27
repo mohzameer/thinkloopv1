@@ -847,6 +847,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
     setNodes((nds) =>
       nds.map((node) => ({
         ...node,
+        draggable: editingNodeId !== node.id, // Disable dragging when editing
         data: {
           ...node.data,
           isEditing: editingNodeId === node.id,
@@ -1483,6 +1484,22 @@ function CanvasPage({ userId }: CanvasPageProps) {
     setActiveNoteId(null)
   }, [selectedSubItemId])
 
+  // Refresh messages when file changes to ensure welcome message is loaded
+  // This handles the case where a new file is created and the welcome message
+  // might not be immediately available due to Firestore propagation delay
+  useEffect(() => {
+    if (selectedFileId && !messagesLoading) {
+      // If we just loaded and have no messages, wait a bit and refresh
+      // This ensures the welcome message (created during file creation) is loaded
+      if (messages.length === 0) {
+        const timeoutId = setTimeout(() => {
+          refreshMessages()
+        }, 1500) // Give Firestore time to propagate the welcome message
+        return () => clearTimeout(timeoutId)
+      }
+    }
+  }, [selectedFileId, messagesLoading, messages.length, refreshMessages])
+
   // File operation handlers
   const handleCreateFile = useCallback(async () => {
     setIsCreatingFile(true)
@@ -1699,6 +1716,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
             onEdgeDoubleClick={(_, edge) => {
               setEditingEdgeId(edge.id)
             }}
+            editingNodeId={editingNodeId}
             onAddNode={addNode}
             onClearCanvas={clearCanvas}
             isTagPopupOpen={isTagPopupOpen}
