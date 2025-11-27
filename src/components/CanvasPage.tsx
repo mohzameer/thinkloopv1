@@ -517,33 +517,6 @@ function CanvasPage({ userId }: CanvasPageProps) {
     [setEdges]
   )
 
-  const addNode = useCallback((nodeType: 'rectangle' | 'circle') => {
-    // Count existing nodes of the same type to get the next number
-    const existingCount = nodes.filter(n => n.type === nodeType).length
-    const nodeNumber = existingCount + 1
-    const nodeLabel = nodeType === 'circle' 
-      ? `Thinking Node ${nodeNumber}`
-      : `Idea Node ${nodeNumber}`
-    
-    const newNode: Node = {
-      id: `${nodeIdCounter}`,
-      type: nodeType,
-      data: { label: nodeLabel },
-      position: {
-        x: Math.random() * 400 + 100,
-        y: Math.random() * 300 + 100
-      }
-    }
-    setNodes((nds) => [...nds, newNode])
-    setNodeIdCounter((id) => id + 1)
-  }, [nodeIdCounter, nodes, setNodes])
-
-  const clearCanvas = useCallback(() => {
-    setNodes([])
-    setEdges([])
-    setNodeIdCounter(1)
-  }, [setNodes, setEdges])
-
   // Helper function to get node dimensions
   const getNodeDimensions = useCallback((nodeType: string, label?: string): { width: number; height: number } => {
     switch (nodeType) {
@@ -561,6 +534,124 @@ function CanvasPage({ userId }: CanvasPageProps) {
         return { width: 100, height: 100 }
     }
   }, [])
+
+  const addNode = useCallback((nodeType: 'rectangle' | 'circle', getViewport?: () => { x: number; y: number; zoom: number } | null) => {
+    // Count existing nodes of the same type to get the next number
+    const existingCount = nodes.filter(n => n.type === nodeType).length
+    const nodeNumber = existingCount + 1
+    const nodeLabel = nodeType === 'circle' 
+      ? `Thinking Node ${nodeNumber}`
+      : `Idea Node ${nodeNumber}`
+    
+    // Calculate smart position based on viewport and existing nodes
+    let position: { x: number; y: number }
+    
+    if (getViewport) {
+      const viewport = getViewport()
+      if (viewport) {
+        // Get viewport bounds in flow coordinates
+        const pane = document.querySelector('.react-flow__pane') as HTMLElement
+        if (pane) {
+          const rect = pane.getBoundingClientRect()
+          const viewportWidth = rect.width / viewport.zoom
+          const viewportHeight = rect.height / viewport.zoom
+          
+          // Calculate viewport bounds in flow coordinates
+          const viewportMinX = -viewport.x / viewport.zoom
+          const viewportMinY = -viewport.y / viewport.zoom
+          const viewportMaxX = viewportMinX + viewportWidth
+          const viewportMaxY = viewportMinY + viewportHeight
+          
+          // Find nodes that are visible in the viewport
+          const nodesInViewport = nodes.filter(node => {
+            const nodeDims = getNodeDimensions(node.type || 'rectangle', node.data?.label)
+            const nodeRight = node.position.x + nodeDims.width
+            const nodeBottom = node.position.y + nodeDims.height
+            
+            return node.position.x < viewportMaxX && 
+                   nodeRight > viewportMinX &&
+                   node.position.y < viewportMaxY &&
+                   nodeBottom > viewportMinY
+          })
+          
+          if (nodesInViewport.length > 0) {
+            // Position near existing nodes in viewport
+            // Calculate average position
+            const avgX = nodesInViewport.reduce((sum, n) => {
+              const dims = getNodeDimensions(n.type || 'rectangle', n.data?.label)
+              return sum + n.position.x + dims.width / 2
+            }, 0) / nodesInViewport.length
+            
+            const avgY = nodesInViewport.reduce((sum, n) => {
+              const dims = getNodeDimensions(n.type || 'rectangle', n.data?.label)
+              return sum + n.position.y + dims.height / 2
+            }, 0) / nodesInViewport.length
+            
+            // Find the rightmost node to place new node to the right
+            const rightmostNode = nodesInViewport.reduce((max, node) => {
+              const maxDims = getNodeDimensions(max.type || 'rectangle', max.data?.label)
+              const nodeDims = getNodeDimensions(node.type || 'rectangle', node.data?.label)
+              return (node.position.x + nodeDims.width) > (max.position.x + maxDims.width) ? node : max
+            })
+            
+            const rightmostDims = getNodeDimensions(rightmostNode.type || 'rectangle', rightmostNode.data?.label)
+            const newNodeDims = getNodeDimensions(nodeType, nodeLabel)
+            const spacing = 50
+            
+            // Position to the right of the rightmost node, but keep within viewport
+            let newX = rightmostNode.position.x + rightmostDims.width + spacing
+            let newY = rightmostNode.position.y
+            
+            // Ensure it's within viewport bounds (with some padding)
+            const padding = 20
+            if (newX + newNodeDims.width > viewportMaxX - padding) {
+              // If too far right, place below the rightmost node
+              newX = rightmostNode.position.x
+              newY = rightmostNode.position.y + rightmostDims.height + spacing
+            }
+            
+            // Ensure Y is within viewport
+            if (newY + newNodeDims.height > viewportMaxY - padding) {
+              newY = viewportMinY + padding
+            }
+            
+            position = { x: newX, y: newY }
+          } else {
+            // No nodes in viewport, place in center of viewport
+            const newNodeDims = getNodeDimensions(nodeType, nodeLabel)
+            position = {
+              x: (viewportMinX + viewportMaxX) / 2 - newNodeDims.width / 2,
+              y: (viewportMinY + viewportMaxY) / 2 - newNodeDims.height / 2
+            }
+          }
+        } else {
+          // Fallback if pane not found
+          position = { x: 400, y: 300 }
+        }
+      } else {
+        // Fallback if viewport not available
+        position = { x: 400, y: 300 }
+      }
+    } else {
+      // Fallback if getViewport not provided
+      position = { x: 400, y: 300 }
+    }
+    
+    const newNode: Node = {
+      id: `${nodeIdCounter}`,
+      type: nodeType,
+      data: { label: nodeLabel },
+      position
+    }
+    setNodes((nds) => [...nds, newNode])
+    setNodeIdCounter((id) => id + 1)
+  }, [nodeIdCounter, nodes, setNodes, getNodeDimensions])
+
+  const clearCanvas = useCallback(() => {
+    setNodes([])
+    setEdges([])
+    setNodeIdCounter(1)
+  }, [setNodes, setEdges])
 
   // Add connected node from an unconnected handle
   const addConnectedNode = useCallback((sourceNodeId: string, handlePosition: Position, nodeType: string) => {

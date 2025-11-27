@@ -31,6 +31,7 @@ export interface FileDocument {
   tags: Tag[]
   lastViewedMainItemId?: string
   lastViewedSubItemId?: string
+  exportContext?: string // AI-generated context for export
   createdAt: Timestamp
   updatedAt: Timestamp
 }

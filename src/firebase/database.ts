@@ -257,6 +257,23 @@ export const updateFileLastViewed = async (
 }
 
 /**
+ * Update a file's export context
+ */
+export const updateFileExportContext = async (fileId: string, exportContext: string): Promise<void> => {
+  try {
+    const fileRef = doc(db, 'files', fileId)
+    await updateDoc(fileRef, {
+      exportContext,
+      updatedAt: serverTimestamp()
+    })
+    console.log('[Database] File export context updated:', fileId)
+  } catch (error) {
+    console.error('[Database] Error updating file export context:', error)
+    throw error
+  }
+}
+
+/**
  * Delete a file and all its main items and sub-items
  */
 export const deleteFile = async (fileId: string): Promise<void> => {

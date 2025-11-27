@@ -36,7 +36,8 @@ Frontend (React/Vite)
 - **Runtime**: Node.js (v18+)
 - **Framework**: Express.js
 - **HTTP Client**: Built-in `fetch` (Node 18+) or `node-fetch`
-- **Environment**: Use environment variables for API key
+- **Authentication**: Firebase Admin SDK for token verification
+- **Environment**: Use environment variables for API keys and Firebase config
 
 ### Project Structure
 ```
@@ -45,11 +46,297 @@ backend/
 ├── .env
 ├── .env.example
 ├── server.js (or index.js)
+├── middleware/
+│   └── auth.js (Firebase token verification middleware)
 └── providers/
     ├── anthropic.js
     ├── openai.js
     ├── deepseek.js
     └── base.js (base provider interface)
+```
+
+## Authentication & Authorization
+
+### Overview
+
+The backend uses **Firebase Authentication** for user authentication. The frontend sends Firebase ID tokens in the `Authorization` header, and the backend verifies these tokens using the Firebase Admin SDK.
+
+### Authentication Flow
+
+```
+Frontend (React)
+    ↓
+Firebase Auth: auth.currentUser.getIdToken()
+    ↓
+HTTP Request with Authorization: Bearer <firebase-id-token>
+    ↓
+Backend (Express)
+    ↓
+Firebase Admin SDK: verifyIdToken(token)
+    ↓
+Extract userId from decoded token
+    ↓
+Process request with authenticated user context
+```
+
+### Frontend Token Retrieval
+
+The frontend must include the Firebase ID token in all API requests:
+
+```typescript
+import { getAuth } from 'firebase/auth'
+
+// Get current user's ID token
+const auth = getAuth()
+const user = auth.currentUser
+
+if (user) {
+  const token = await user.getIdToken()
+  
+  // Include in API requests
+  const response = await fetch(`${API_BASE_URL}/messages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`  // ← Required
+    },
+    body: JSON.stringify(requestBody)
+  })
+}
+```
+
+### Backend Token Verification
+
+**Install Firebase Admin SDK**:
+```bash
+npm install firebase-admin
+```
+
+**Initialize Firebase Admin**:
+```javascript
+// server.js or auth.js
+import admin from 'firebase-admin'
+
+// Initialize Firebase Admin SDK
+// Option 1: Using service account JSON (recommended for production)
+const serviceAccount = require('./path/to/serviceAccountKey.json')
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+})
+
+// Option 2: Using environment variables (alternative)
+admin.initializeApp({
+  credential: admin.credential.cert({
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL
+  })
+})
+```
+
+**Create Authentication Middleware**:
+```javascript
+// middleware/auth.js
+import admin from 'firebase-admin'
+
+/**
+ * Middleware to verify Firebase ID token
+ * Extracts userId from token and attaches to request object
+ */
+export async function verifyFirebaseToken(req, res, next) {
+  try {
+    // Get token from Authorization header
+    const authHeader = req.headers.authorization
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        error: 'Missing or invalid Authorization header',
+        type: 'unauthorized'
+      })
+    }
+    
+    const token = authHeader.split('Bearer ')[1]
+    
+    // Verify token with Firebase Admin SDK
+    const decodedToken = await admin.auth().verifyIdToken(token)
+    
+    // Attach user info to request
+    req.user = {
+      uid: decodedToken.uid,
+      email: decodedToken.email,
+      isAnonymous: decodedToken.firebase.sign_in_provider === 'anonymous'
+    }
+    
+    // Continue to next middleware/route
+    next()
+  } catch (error) {
+    console.error('[Auth] Token verification failed:', error)
+    
+    if (error.code === 'auth/id-token-expired') {
+      return res.status(401).json({
+        error: 'Token expired. Please refresh and try again.',
+        type: 'token_expired'
+      })
+    }
+    
+    if (error.code === 'auth/id-token-revoked') {
+      return res.status(401).json({
+        error: 'Token revoked. Please sign in again.',
+        type: 'token_revoked'
+      })
+    }
+    
+    return res.status(401).json({
+      error: 'Invalid or expired token',
+      type: 'unauthorized'
+    })
+  }
+}
+```
+
+**Apply Middleware to Protected Routes**:
+```javascript
+// server.js
+import { verifyFirebaseToken } from './middleware/auth.js'
+
+// Apply to all API routes
+app.use('/api', verifyFirebaseToken)
+
+// Or apply to specific routes
+app.post('/api/ai/messages', verifyFirebaseToken, async (req, res) => {
+  // req.user.uid is available here
+  const userId = req.user.uid
+  // ... process request
+})
+```
+
+### Request Headers (All Protected Endpoints)
+
+All API endpoints require the following header:
+
+```
+Authorization: Bearer <firebase-id-token>
+```
+
+**Example**:
+```
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IjEyMzQ1NiIsInR5cCI6IkpXVCJ9...
+```
+
+### Response Codes
+
+- **200 OK**: Request successful, user authenticated
+- **401 Unauthorized**: Missing, invalid, or expired token
+- **403 Forbidden**: Token valid but user lacks permission (if implementing role-based access)
+
+### Error Responses
+
+**Missing Token**:
+```json
+{
+  "error": "Missing or invalid Authorization header",
+  "type": "unauthorized"
+}
+```
+
+**Invalid/Expired Token**:
+```json
+{
+  "error": "Invalid or expired token",
+  "type": "unauthorized"
+}
+```
+
+**Token Expired** (specific):
+```json
+{
+  "error": "Token expired. Please refresh and try again.",
+  "type": "token_expired"
+}
+```
+
+### User Context in Requests
+
+After token verification, the `req.user` object is available in all route handlers:
+
+```javascript
+app.post('/api/ai/messages', verifyFirebaseToken, async (req, res) => {
+  const userId = req.user.uid           // Firebase user ID
+  const userEmail = req.user.email      // User email (if not anonymous)
+  const isAnonymous = req.user.isAnonymous  // true if anonymous user
+  
+  // Use userId for logging, rate limiting, etc.
+  console.log(`Request from user: ${userId}`)
+  
+  // ... process request
+})
+```
+
+### Anonymous Users
+
+Firebase supports anonymous authentication. Anonymous users:
+- Have valid Firebase ID tokens
+- Can access all API endpoints (if your business logic allows)
+- Can be upgraded to registered users later (handled by frontend)
+
+**Check if user is anonymous**:
+```javascript
+if (req.user.isAnonymous) {
+  // Handle anonymous user (e.g., rate limiting, feature restrictions)
+}
+```
+
+### Security Best Practices
+
+1. **Always verify tokens server-side**: Never trust client-provided user IDs
+2. **Use HTTPS in production**: Tokens should only be sent over encrypted connections
+3. **Token expiration**: Firebase tokens expire after 1 hour. Frontend should refresh tokens automatically
+4. **Rate limiting**: Implement rate limiting per userId to prevent abuse
+5. **Logging**: Log userId with all requests for audit trails
+
+### Environment Variables
+
+Add to backend `.env`:
+
+```env
+# Firebase Admin SDK (Service Account)
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com
+
+# OR use service account JSON file path
+FIREBASE_SERVICE_ACCOUNT_PATH=./path/to/serviceAccountKey.json
+```
+
+### Getting Firebase Service Account Key
+
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Select your project
+3. Go to **Project Settings** → **Service Accounts**
+4. Click **Generate New Private Key**
+5. Download the JSON file
+6. Store securely (never commit to git)
+
+### Testing Authentication
+
+**Test with valid token**:
+```bash
+# Get token from frontend (browser console)
+const token = await firebase.auth().currentUser.getIdToken()
+
+# Use in curl
+curl -X POST http://localhost:3001/api/ai/messages \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+**Test without token** (should fail):
+```bash
+curl -X POST http://localhost:3001/api/ai/messages \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "Hello"}]}'
+# Expected: 401 Unauthorized
 ```
 
 ## API Endpoint Specification
@@ -58,9 +345,12 @@ backend/
 
 **Purpose**: Provider-agnostic AI API endpoint that routes to appropriate provider based on model or configuration
 
+**Authentication**: Required (Firebase ID token)
+
 **Request Headers**:
 ```
 Content-Type: application/json
+Authorization: Bearer <firebase-id-token>
 ```
 
 **Request Body**:
@@ -446,12 +736,25 @@ NODE_ENV=development
 
 Create `.env.example`:
 ```env
+# AI Provider API Keys
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
 DEEPSEEK_API_KEY=your_deepseek_api_key_here
 DEFAULT_AI_MODEL=claude-sonnet-4-5-20250929
 DEFAULT_AI_PROVIDER=anthropic
+
+# Firebase Admin SDK (Service Account)
+# Option 1: Use service account JSON file path
+FIREBASE_SERVICE_ACCOUNT_PATH=./path/to/serviceAccountKey.json
+
+# Option 2: Use individual credentials (alternative)
+# FIREBASE_PROJECT_ID=your-project-id
+# FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+# FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com
+
+# Server Configuration
 PORT=3001
+FRONTEND_URL=http://localhost:5173
 NODE_ENV=development
 ```
 
@@ -470,7 +773,8 @@ NODE_ENV=development
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "firebase-admin": "^12.0.0"
   }
 }
 ```
@@ -739,10 +1043,15 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Health check
+// Health check (no auth required)
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Apply authentication middleware to all API routes
+// Import the middleware (see Authentication & Authorization section above)
+import { verifyFirebaseToken } from './middleware/auth.js'
+app.use('/api', verifyFirebaseToken)
 
 /**
  * Model abstraction: Get the model to use for this request
@@ -755,8 +1064,14 @@ function getModelForRequest(requestedModel) {
 }
 
 // Anthropic proxy endpoint
+// Note: verifyFirebaseToken middleware is already applied via app.use('/api', ...)
+// req.user.uid is available after authentication
 app.post('/api/anthropic/messages', async (req, res) => {
   try {
+    // User is authenticated at this point (via middleware)
+    const userId = req.user.uid
+    console.log(`[API] Request from user: ${userId}`)
+    
     const apiKey = process.env.ANTHROPIC_API_KEY;
     
     if (!apiKey) {
@@ -865,6 +1180,295 @@ app.listen(PORT, () => {
 5. Run: `node server.js`
 6. Update frontend to use backend URL
 7. Test end-to-end
+
+---
+
+## Export API Endpoints
+
+### Overview
+
+The export feature allows users to export diagram content in various formats (text, markdown, PDF). The backend handles:
+1. **AI-generated context** - Derives comprehensive context from diagram nodes using AI
+2. **PDF generation** - Converts text/markdown content to PDF format
+
+**Note**: Copy as text and copy as markdown are handled client-side and don't require backend endpoints.
+
+### Endpoint: `POST /api/export/generate-context`
+
+**Purpose**: Generate AI-derived context from diagram nodes for export. This context is one per file and should be cached/saved by the frontend to Firestore.
+
+**Authentication**: Required (Firebase ID token)
+
+**Request Headers**:
+```
+Content-Type: application/json
+Authorization: Bearer <firebase-id-token>
+```
+
+**Request Body**:
+```typescript
+{
+  nodes: Array<{
+    id: string
+    type?: string
+    data: {
+      label: string
+      categories?: string[]
+      tags?: Array<{ name: string; color: string }>
+    }
+    position?: { x: number; y: number }
+  }>
+  edges: Array<{
+    id: string
+    source: string
+    target: string
+    data?: {
+      label?: string
+    }
+  }>
+  fileId: string                    // For caching/reference
+}
+```
+
+**Node Filtering Rules**:
+- **Exclude nodes** that contain "Idea node" or "thinking node" (case-insensitive) in their label
+- Only process nodes that pass the filter
+
+**Processing Steps**:
+1. Filter out excluded nodes (Idea node, thinking node)
+2. Build an outline of all remaining nodes with their content
+3. Include edge relationships and labels
+4. Send outline to AI to generate comprehensive context
+5. Return the AI-generated context
+
+**Response Headers**:
+```
+Content-Type: application/json
+```
+
+**Success Response** (200 OK):
+```typescript
+{
+  context: string                   // AI-generated comprehensive context
+  outline?: string                  // Optional: the raw outline sent to AI (for debugging)
+  nodeCount: number                 // Number of nodes processed (after filtering)
+  edgeCount: number                 // Number of edges processed
+}
+```
+
+**Error Response** (4xx/5xx):
+```typescript
+{
+  error: string
+  type?: string
+  statusCode?: number
+}
+```
+
+**Example Request**:
+```json
+{
+  "nodes": [
+    {
+      "id": "node1",
+      "type": "rectangle",
+      "data": {
+        "label": "Main Concept: Machine Learning"
+      },
+      "position": { "x": 100, "y": 200 }
+    },
+    {
+      "id": "node2",
+      "type": "circle",
+      "data": {
+        "label": "Idea node: Random thought"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge1",
+      "source": "node1",
+      "target": "node2",
+      "data": {
+        "label": "relates to"
+      }
+    }
+  ],
+  "fileId": "file123"
+}
+```
+
+**Example Response**:
+```json
+{
+  "context": "# Machine Learning Overview\n\nThis diagram explores the concept of Machine Learning...",
+  "nodeCount": 1,
+  "edgeCount": 1
+}
+```
+
+**Implementation Notes**:
+- Use the same AI provider abstraction as `/api/ai/messages`
+- System prompt should instruct AI to create comprehensive, well-structured summaries
+- If AI fails, fallback to returning the raw outline
+- Consider caching results per fileId to avoid regenerating context unnecessarily
+
+---
+
+### Endpoint: `POST /api/export/generate-pdf`
+
+**Purpose**: Convert text or markdown content to PDF format for download.
+
+**Authentication**: Required (Firebase ID token)
+
+**Request Headers**:
+```
+Content-Type: application/json
+Authorization: Bearer <firebase-id-token>
+```
+
+**Request Body**:
+```typescript
+{
+  content: string                   // Text or markdown content to convert
+  format: "text" | "markdown"      // Format of the input content
+  title?: string                    // Optional: PDF title
+  fileName?: string                 // Optional: suggested filename (default: "export.pdf")
+}
+```
+
+**Response Headers**:
+```
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="export.pdf"
+```
+
+**Success Response** (200 OK):
+- Binary PDF file content
+
+**Error Response** (4xx/5xx):
+```typescript
+{
+  error: string
+  type?: string
+  statusCode?: number
+}
+```
+
+**Example Request**:
+```json
+{
+  "content": "# My Document\n\nThis is the content...",
+  "format": "markdown",
+  "title": "My Export",
+  "fileName": "my-export.pdf"
+}
+```
+
+**Implementation Notes**:
+- Use a PDF generation library like `pdfkit`, `puppeteer`, or `jsPDF` (server-side)
+- For markdown, convert to HTML first, then to PDF
+- Support proper formatting: headings, lists, code blocks, etc.
+- Set appropriate page margins and styling
+- Handle long content with page breaks
+
+**Recommended Libraries**:
+- **pdfkit** (Node.js): Good for programmatic PDF generation
+- **puppeteer** (Node.js): Renders HTML/CSS to PDF (best for markdown)
+- **marked** + **puppeteer**: Convert markdown → HTML → PDF
+
+**Example Implementation (using puppeteer)**:
+```javascript
+import puppeteer from 'puppeteer';
+import { marked } from 'marked';
+
+app.post('/api/export/generate-pdf', async (req, res) => {
+  try {
+    const { content, format, title, fileName } = req.body;
+    
+    let html = '';
+    if (format === 'markdown') {
+      html = marked(content);
+    } else {
+      html = `<pre>${content}</pre>`;
+    }
+    
+    const fullHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>${title || 'Export'}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; }
+            h1, h2, h3 { color: #333; }
+            pre { background: #f5f5f5; padding: 10px; }
+          </style>
+        </head>
+        <body>${html}</body>
+      </html>
+    `;
+    
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
+    await page.setContent(fullHtml);
+    const pdf = await page.pdf({ format: 'A4', printBackground: true });
+    await browser.close();
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName || 'export.pdf'}"`);
+    res.send(pdf);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+```
+
+---
+
+## Export Feature Frontend Integration
+
+### Client-Side Functions (No Backend Required)
+
+1. **Copy as Text**: 
+   - Simply copy the context string to clipboard using `navigator.clipboard.writeText()`
+   - No backend call needed
+
+2. **Copy as Markdown**:
+   - If context is already markdown, copy directly
+   - If context is plain text, wrap in markdown code blocks or convert
+   - Use `navigator.clipboard.writeText()` with markdown content
+
+3. **Download PDF**:
+   - Call `POST /api/export/generate-pdf` with content and format
+   - Receive PDF binary response
+   - Create blob and trigger download
+
+### Context Caching
+
+- **Save context to Firestore**: After generating context, save it to the file document's `exportContext` field
+- **Check cache first**: Before calling `/api/export/generate-context`, check if `exportContext` exists in Firestore
+- **Regenerate on demand**: Provide option to regenerate context if diagram has changed
+- **One context per file**: Context is stored at the file level, not per sub-item
+
+### Frontend Flow
+
+```
+1. User clicks Export button
+2. Check Firestore for existing exportContext
+3. If exists:
+   - Use cached context
+4. If not exists or user requests regeneration:
+   - Call POST /api/export/generate-context with nodes/edges
+   - Save response.context to Firestore exportContext field
+   - Use the context
+5. Show modal with context in textarea
+6. User clicks action button:
+   - Copy as Text: navigator.clipboard.writeText(context)
+   - Copy as Markdown: navigator.clipboard.writeText(markdownContext)
+   - Download PDF: POST /api/export/generate-pdf → download blob
+```
 
 
 

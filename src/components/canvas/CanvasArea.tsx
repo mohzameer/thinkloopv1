@@ -30,7 +30,7 @@ interface CanvasAreaProps {
   onSelectionChange: (params: OnSelectionChangeParams) => void
   onNodeDoubleClick: (event: React.MouseEvent, node: Node) => void
   onEdgeDoubleClick: (event: React.MouseEvent, edge: Edge) => void
-  onAddNode: (nodeType: 'rectangle' | 'circle') => void
+  onAddNode: (nodeType: 'rectangle' | 'circle', getViewport?: () => { x: number; y: number; zoom: number } | null) => void
   // Tag System
   isTagPopupOpen: boolean
   selectedTagsForNodes: string[]
@@ -444,7 +444,7 @@ export const CanvasArea = ({
         <ActionIcon
           size="lg"
           variant="transparent"
-          onClick={() => onAddNode('rectangle')}
+          onClick={() => onAddNode('rectangle', () => reactFlowInstanceRef.current?.getViewport() || null)}
           title="Add Idea Node"
           style={{ color: 'var(--text-primary)' }}
         >
@@ -453,7 +453,7 @@ export const CanvasArea = ({
         <ActionIcon
           size="lg"
           variant="transparent"
-          onClick={() => onAddNode('circle')}
+          onClick={() => onAddNode('circle', () => reactFlowInstanceRef.current?.getViewport() || null)}
           title="Add Thinking Node"
           style={{ color: 'var(--text-primary)' }}
         >
