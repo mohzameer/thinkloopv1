@@ -43,6 +43,7 @@ interface CanvasAreaProps {
   // Color System
   colors: { name: string; value: string }[]
   updateNodeColor: (color: string) => void
+  updateNodeType: (nodeType: 'rectangle' | 'circle') => void
   // Notes System
   notes: Note[]
   onAddNote: (x: number, y: number) => void
@@ -79,6 +80,7 @@ export const CanvasArea = ({
   onRemoveTag,
   colors,
   updateNodeColor,
+  updateNodeType,
   notes,
   onAddNote,
   onUpdateNote,
@@ -151,6 +153,7 @@ export const CanvasArea = ({
     onAddNote(flowPos.x, flowPos.y)
     setIsAddNoteMode(false)
   }, [isAddNoteMode, onAddNote, onCanvasClick])
+
 
   const handleWrapperClick = useCallback((event: React.MouseEvent) => {
     if (!isAddNoteMode || !reactFlowInstanceRef.current) {
@@ -416,6 +419,7 @@ export const CanvasArea = ({
             selectedNodes={selectedNodes}
             colors={colors}
             updateNodeColor={updateNodeColor}
+            updateNodeType={updateNodeType}
             onTagClick={onTagClick}
             isTagPopupOpen={isTagPopupOpen}
           />

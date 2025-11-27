@@ -113,8 +113,10 @@ export const CircleNode = ({ id, data, selected }: NodeProps) => {
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
       <div
         style={{
-          width: '100px',
-          height: '100px',
+          minWidth: '80px',
+          minHeight: '80px',
+          width: 'fit-content',
+          height: 'fit-content',
           borderRadius: '50%',
           border: `2px solid ${data.borderColor || 'var(--node-border)'}`,
           backgroundColor: 'var(--bg-primary)',
@@ -124,11 +126,13 @@ export const CircleNode = ({ id, data, selected }: NodeProps) => {
           fontSize: '12px',
           fontWeight: 500,
           textAlign: 'center',
-          padding: '8px',
+          padding: '16px',
           position: 'relative',
           boxShadow: selected ? '0 0 0 3px rgba(220, 38, 38, 0.3)' : 'none',
           transition: 'all 0.3s ease',
-          color: 'var(--text-primary)'
+          color: 'var(--text-primary)',
+          aspectRatio: '1',
+          maxWidth: '300px'
         }}
       >
         <Handle type="target" position={Position.Top} id="top-target" />

@@ -797,6 +797,22 @@ function CanvasPage({ userId }: CanvasPageProps) {
     )
   }, [selectedNodes, setNodes])
 
+  const updateNodeType = useCallback((nodeType: 'rectangle' | 'circle') => {
+    if (selectedNodes.length === 0) return
+
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (selectedNodes.some(selected => selected.id === node.id)) {
+          return {
+            ...node,
+            type: nodeType
+          }
+        }
+        return node
+      })
+    )
+  }, [selectedNodes, setNodes])
+
   // Tag System Handlers
   const handleTagClick = useCallback(() => {
     setIsTagPopupOpen(!isTagPopupOpen)
@@ -1838,6 +1854,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
             onRemoveTag={handleRemoveTag}
             colors={colors}
             updateNodeColor={updateNodeColor}
+            updateNodeType={updateNodeType}
             notes={notes}
             onAddNote={handleAddNote}
             onUpdateNote={handleUpdateNote}
