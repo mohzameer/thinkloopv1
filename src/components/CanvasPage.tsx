@@ -223,20 +223,30 @@ function CanvasPage({ userId }: CanvasPageProps) {
   // Track previous file ID to detect file changes
   const previousFileIdRef = useRef<string | null>(null)
 
-  // Clear selection when switching files to allow auto-select logic to load last viewed sub-item
+  // Clear selection and canvas when switching files to allow auto-select logic to load last viewed sub-item
   useEffect(() => {
     // Only clear if file actually changed (not on initial load)
     if (selectedFileId && previousFileIdRef.current !== null && previousFileIdRef.current !== selectedFileId) {
-      console.log('[CanvasPage] File changed, clearing selection to load last viewed:', {
+      console.log('[CanvasPage] File changed, clearing selection and canvas to load last viewed:', {
         previousFile: previousFileIdRef.current,
         newFile: selectedFileId
       })
       // Clear current selection when file changes to trigger auto-select with last viewed
       setSelectedMainItemId(null)
       setSelectedSubItemId(null)
+      // Immediately clear nodes and edges to prevent old branches from showing
+      setNodes([])
+      setEdges([])
+      setNodeIdCounter(1)
+      // Reset canvas loading state
+      lastLoadedCanvasState.current = null
+      currentCanvasKey.current = null
+      // Refresh chat messages for the new file
+      // The useChat hook should handle this automatically, but we refresh to ensure it happens
+      refreshMessages()
     }
     previousFileIdRef.current = selectedFileId
-  }, [selectedFileId])
+  }, [selectedFileId, setNodes, setEdges, refreshMessages])
 
   // Auto-select main item and sub-item when hierarchy loads
   // Prioritizes last viewed sub-item, falls back to first main item's default sub-item
@@ -1336,9 +1346,12 @@ function CanvasPage({ userId }: CanvasPageProps) {
         return
       }
 
-      // Validate response has node updates
-      if (!aiResponse.response.nodeUpdates || !Array.isArray(aiResponse.response.nodeUpdates) || aiResponse.response.nodeUpdates.length === 0) {
-        console.warn('[CanvasPage] No node updates to apply from AI response')
+      // Validate response has at least one update (node or edge)
+      const hasNodeUpdates = aiResponse.response.nodeUpdates && aiResponse.response.nodeUpdates.length > 0
+      const hasEdgeUpdates = aiResponse.response.edgeUpdates && aiResponse.response.edgeUpdates.length > 0
+      
+      if (!hasNodeUpdates && !hasEdgeUpdates) {
+        console.warn('[CanvasPage] No node or edge updates to apply from AI response')
         return
       }
 
@@ -1350,16 +1363,54 @@ function CanvasPage({ userId }: CanvasPageProps) {
       const versionName = currentSubItem?.data.name || `V${variationIndex + 1}`
 
       // Build permission request message
-      const updateDescriptions = aiResponse.response.nodeUpdates.map(update => {
-        const identifier = update.nodeId || update.nodeLabel || 'Unknown'
-        return `"${identifier}" → "${update.newLabel}"`
-      })
+      const nodeUpdateDescriptions: string[] = []
+      const edgeUpdateDescriptions: string[] = []
       
-      let permissionMessage = `I can update ${aiResponse.response.nodeUpdates.length} node label(s) in "${versionName}":\n\n`
-      updateDescriptions.forEach((desc, idx) => {
-        permissionMessage += `${idx + 1}. ${desc}\n`
-      })
-      permissionMessage += `\n${aiResponse.response.explanation || ''}\n\nWould you like me to proceed? (Reply "yes" to confirm or "no" to cancel)`
+      if (aiResponse.response.nodeUpdates && aiResponse.response.nodeUpdates.length > 0) {
+        aiResponse.response.nodeUpdates.forEach(update => {
+          const identifier = update.nodeId || update.nodeLabel || 'Unknown'
+          nodeUpdateDescriptions.push(`"${identifier}" → "${update.newLabel}"`)
+        })
+      }
+      
+      if (aiResponse.response.edgeUpdates && aiResponse.response.edgeUpdates.length > 0) {
+        aiResponse.response.edgeUpdates.forEach(update => {
+          const identifier = update.edgeId || 
+            (update.source && update.target ? `${update.source} → ${update.target}` : null) ||
+            update.currentLabel || 
+            'Unknown'
+          edgeUpdateDescriptions.push(`"${identifier}" → "${update.newLabel}"`)
+        })
+      }
+      
+      const totalUpdates = (aiResponse.response.nodeUpdates?.length || 0) + (aiResponse.response.edgeUpdates?.length || 0)
+      const parts: string[] = []
+      if (nodeUpdateDescriptions.length > 0) {
+        parts.push(`${nodeUpdateDescriptions.length} node label(s)`)
+      }
+      if (edgeUpdateDescriptions.length > 0) {
+        parts.push(`${edgeUpdateDescriptions.length} edge label(s)`)
+      }
+      
+      let permissionMessage = `I can update ${parts.join(' and ')} in "${versionName}":\n\n`
+      
+      if (nodeUpdateDescriptions.length > 0) {
+        permissionMessage += `Node updates:\n`
+        nodeUpdateDescriptions.forEach((desc, idx) => {
+          permissionMessage += `${idx + 1}. ${desc}\n`
+        })
+        permissionMessage += `\n`
+      }
+      
+      if (edgeUpdateDescriptions.length > 0) {
+        permissionMessage += `Edge updates:\n`
+        edgeUpdateDescriptions.forEach((desc, idx) => {
+          permissionMessage += `${idx + 1}. ${desc}\n`
+        })
+        permissionMessage += `\n`
+      }
+      
+      permissionMessage += `${aiResponse.response.explanation || ''}\n\nWould you like me to proceed? (Reply "yes" to confirm or "no" to cancel)`
 
       // Save permission request message (without triggering AI)
       if (selectedFileId) {
@@ -1379,7 +1430,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
     }
   }, [selectedFileId, refreshMessages, currentMainItem, selectedSubItemId, variationIndex])
 
-  // Execute AI update (actually update node labels on canvas)
+  // Execute AI update (actually update node labels and edge labels on canvas)
   const executeAIUpdate = useCallback(async (aiResponse: AIResponseData) => {
     try {
       // Type guard: ensure it's an UPDATE response
@@ -1391,77 +1442,142 @@ function CanvasPage({ userId }: CanvasPageProps) {
       // Now TypeScript knows it's an UPDATE response
       const updateResponse = aiResponse.response
 
-      // Validate response has node updates
-      if (!updateResponse.nodeUpdates || !Array.isArray(updateResponse.nodeUpdates) || updateResponse.nodeUpdates.length === 0) {
-        console.warn('[CanvasPage] No node updates to apply from AI response')
+      // Validate response has at least one update (node or edge)
+      const hasNodeUpdates = updateResponse.nodeUpdates && updateResponse.nodeUpdates.length > 0
+      const hasEdgeUpdates = updateResponse.edgeUpdates && updateResponse.edgeUpdates.length > 0
+      
+      if (!hasNodeUpdates && !hasEdgeUpdates) {
+        console.warn('[CanvasPage] No node or edge updates to apply from AI response')
         return
       }
 
-      // Create a label-to-ID mapping for existing nodes
-      const labelToIdMap = new Map<string, string>()
-      nodes.forEach(node => {
-        const label = (node.data as any)?.label
-        if (label && typeof label === 'string') {
-          // Use first match (if multiple nodes have same label, use first one)
-          if (!labelToIdMap.has(label.toLowerCase())) {
-            labelToIdMap.set(label.toLowerCase(), node.id)
-          }
-        }
-      })
-
-      // Apply updates
-      let updateCount = 0
+      let nodeUpdateCount = 0
+      let edgeUpdateCount = 0
       const errors: string[] = []
 
-      setNodes((nds) => {
-        return nds.map((node) => {
-          // Check if this node should be updated
-          for (const update of updateResponse.nodeUpdates) {
-            let shouldUpdate = false
-
-            // Check by nodeId first (preferred)
-            if (update.nodeId && node.id === update.nodeId) {
-              shouldUpdate = true
+      // Apply node updates
+      if (hasNodeUpdates) {
+        // Create a label-to-ID mapping for existing nodes
+        const labelToIdMap = new Map<string, string>()
+        nodes.forEach(node => {
+          const label = (node.data as any)?.label
+          if (label && typeof label === 'string') {
+            // Use first match (if multiple nodes have same label, use first one)
+            if (!labelToIdMap.has(label.toLowerCase())) {
+              labelToIdMap.set(label.toLowerCase(), node.id)
             }
-            // Check by nodeLabel if nodeId not provided
-            else if (update.nodeLabel) {
-              const nodeLabel = (node.data as any)?.label
-              if (nodeLabel && typeof nodeLabel === 'string' && 
-                  nodeLabel.toLowerCase() === update.nodeLabel.toLowerCase()) {
+          }
+        })
+
+        setNodes((nds) => {
+          return nds.map((node) => {
+            // Check if this node should be updated
+            for (const update of updateResponse.nodeUpdates!) {
+              let shouldUpdate = false
+
+              // Check by nodeId first (preferred)
+              if (update.nodeId && node.id === update.nodeId) {
                 shouldUpdate = true
               }
-            }
+              // Check by nodeLabel if nodeId not provided
+              else if (update.nodeLabel) {
+                const nodeLabel = (node.data as any)?.label
+                if (nodeLabel && typeof nodeLabel === 'string' && 
+                    nodeLabel.toLowerCase() === update.nodeLabel.toLowerCase()) {
+                  shouldUpdate = true
+                }
+              }
 
-            if (shouldUpdate) {
-              updateCount++
-              return {
-                ...node,
-                data: {
-                  ...node.data,
-                  label: update.newLabel
+              if (shouldUpdate) {
+                nodeUpdateCount++
+                return {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    label: update.newLabel
+                  }
                 }
               }
             }
-          }
-          return node
+            return node
+          })
         })
-      })
 
-      if (updateCount === 0) {
-        errors.push('No matching nodes found to update')
+        if (nodeUpdateCount === 0 && updateResponse.nodeUpdates!.length > 0) {
+          errors.push('No matching nodes found to update')
+        }
+      }
+
+      // Apply edge updates
+      if (hasEdgeUpdates) {
+        setEdges((eds) => {
+          return eds.map((edge) => {
+            // Check if this edge should be updated
+            for (const update of updateResponse.edgeUpdates!) {
+              let shouldUpdate = false
+
+              // Check by edgeId first (preferred)
+              if (update.edgeId && edge.id === update.edgeId) {
+                shouldUpdate = true
+              }
+              // Check by source and target
+              else if (update.source && update.target) {
+                const sourceMatch = edge.source === update.source || 
+                  nodes.find(n => (n.data as any)?.label === update.source)?.id === edge.source
+                const targetMatch = edge.target === update.target || 
+                  nodes.find(n => (n.data as any)?.label === update.target)?.id === edge.target
+                if (sourceMatch && targetMatch) {
+                  shouldUpdate = true
+                }
+              }
+              // Check by currentLabel if provided
+              else if (update.currentLabel) {
+                const edgeLabel = (edge.data as any)?.label || edge.label
+                if (edgeLabel && typeof edgeLabel === 'string' && 
+                    edgeLabel.toLowerCase() === update.currentLabel.toLowerCase()) {
+                  shouldUpdate = true
+                }
+              }
+
+              if (shouldUpdate) {
+                edgeUpdateCount++
+                return {
+                  ...edge,
+                  label: update.newLabel,
+                  data: {
+                    ...(edge.data || {}),
+                    label: update.newLabel
+                  }
+                }
+              }
+            }
+            return edge
+          })
+        })
+
+        if (edgeUpdateCount === 0 && updateResponse.edgeUpdates!.length > 0) {
+          errors.push('No matching edges found to update')
+        }
       }
 
       // Show errors if any
       if (errors.length > 0) {
-        console.error('[CanvasPage] Node update errors:', errors)
+        console.error('[CanvasPage] Update errors:', errors)
       }
 
       // Save assistant message confirming the update
       if (selectedFileId) {
         try {
-          const confirmationMessage = updateCount > 0
-            ? `Updated ${updateCount} node label(s)${errors.length > 0 ? `. Some updates failed: ${errors.join(', ')}` : ''}.`
-            : `Failed to update nodes: ${errors.join(', ')}.`
+          const parts: string[] = []
+          if (nodeUpdateCount > 0) {
+            parts.push(`${nodeUpdateCount} node label(s)`)
+          }
+          if (edgeUpdateCount > 0) {
+            parts.push(`${edgeUpdateCount} edge label(s)`)
+          }
+          const confirmationMessage = parts.length > 0
+            ? `Updated ${parts.join(' and ')}${errors.length > 0 ? `. Some updates failed: ${errors.join(', ')}` : ''}.`
+            : `Failed to update: ${errors.join(', ')}.`
 
           await createMessageInDb(
             selectedFileId,
@@ -1476,7 +1592,7 @@ function CanvasPage({ userId }: CanvasPageProps) {
     } catch (error) {
       console.error('[CanvasPage] Error executing AI update:', error)
     }
-  }, [nodes, setNodes, selectedFileId, refreshMessages])
+  }, [nodes, edges, setNodes, setEdges, selectedFileId, refreshMessages])
 
   // Handle ADD response - ask for permission instead of immediately drawing
   const handleAddResponse = useCallback(async (aiResponse: AIResponseData) => {
@@ -1643,11 +1759,16 @@ function CanvasPage({ userId }: CanvasPageProps) {
         setSelectedFileId(fileId)
         navigate(`/${generateShortId(fileId)}`)
         setFileExplorerOpened(false)
+        // Explicitly refresh messages to ensure chat loads correctly for new file
+        // The useChat hook should handle this automatically, but we refresh to be safe
+        setTimeout(() => {
+          refreshMessages()
+        }, 500) // Small delay to ensure file is fully created in Firestore
       }
     } finally {
       setIsCreatingFile(false)
     }
-  }, [createFile, navigate])
+  }, [createFile, navigate, refreshMessages])
 
   const handleFileSelect = useCallback((fileId: string) => {
     setSelectedFileId(fileId)

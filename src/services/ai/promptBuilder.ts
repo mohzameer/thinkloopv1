@@ -37,7 +37,7 @@ CAPABILITIES:
 - Understand existing canvas structures (nodes, edges, relationships)
 - Answer questions about relationships and structures
 - Add new nodes and edges based on user requests
-- Update/rename existing node labels (with user permission)
+- Update/rename existing node labels and edge labels (with user permission)
 - Ask clarifying questions when the structure is unclear
 - Suggest improvements or explore ideas
 
@@ -76,7 +76,7 @@ For QUERY/EXPLORE operations: Return natural language explanation:
   "response": "Your explanation here..."
 }
 
-For UPDATE operations (renaming/updating node labels): Return JSON with this structure:
+For UPDATE operations (renaming/updating node labels or edge labels): Return JSON with this structure:
 {
   "action": "update",
   "nodeUpdates": [
@@ -85,9 +85,19 @@ For UPDATE operations (renaming/updating node labels): Return JSON with this str
       "newLabel": "New label text for the node"
     }
   ],
+  "edgeUpdates": [
+    {
+      "edgeId": "edge_id" OR "source": "source_node_id", "target": "target_node_id" OR "currentLabel": "current edge label",
+      "newLabel": "New label text for the edge"
+    }
+  ],
   "explanation": "Brief explanation of what was updated"
 }
-Note: Use nodeId if you know it, otherwise use nodeLabel to identify the node. The user will be asked for permission before applying updates.
+Note: 
+- For nodes: Use nodeId if you know it, otherwise use nodeLabel to identify the node.
+- For edges: Use edgeId if you know it, otherwise use source and target node IDs/labels, or currentLabel to identify the edge.
+- You can update nodes, edges, or both in a single UPDATE action.
+- The user will be asked for permission before applying updates.
 
 For CLARIFICATION: Return questions:
 {

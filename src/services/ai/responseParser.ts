@@ -27,9 +27,17 @@ export interface NodeUpdateData {
   newLabel: string  // New label text for the node
 }
 
+export interface EdgeUpdateData {
+  edgeId?: string  // Edge ID (preferred)
+  source?: string  // Source node ID or label to identify the edge
+  target?: string  // Target node ID or label to identify the edge
+  currentLabel?: string  // Current edge label to identify the edge (if ID not available)
+  newLabel: string  // New label text for the edge
+}
+
 export type AIResponse =
   | { action: 'add'; nodes: NodeData[]; edges: EdgeData[]; explanation: string; complexityWarning?: boolean }
-  | { action: 'update'; nodeUpdates: NodeUpdateData[]; explanation: string }
+  | { action: 'update'; nodeUpdates?: NodeUpdateData[]; edgeUpdates?: EdgeUpdateData[]; explanation: string }
   | { action: 'answer'; response: string }
   | { action: 'clarify'; questions: string[]; context: string }
   | { action: 'error'; message: string }
@@ -225,62 +233,112 @@ function parseAddAction(data: any): AIResponse {
  * Parse UPDATE action response
  */
 function parseUpdateAction(data: any): AIResponse {
-  if (!data.nodeUpdates || !Array.isArray(data.nodeUpdates)) {
-    return {
-      action: 'error',
-      message: 'Invalid UPDATE response: missing or invalid nodeUpdates array'
-    }
-  }
-
-  // Validate and parse node updates
+  // Validate and parse node updates (optional)
   const nodeUpdates: NodeUpdateData[] = []
-  for (const update of data.nodeUpdates) {
-    if (!update || typeof update !== 'object') {
-      continue
-    }
+  if (data.nodeUpdates && Array.isArray(data.nodeUpdates)) {
+    for (const update of data.nodeUpdates) {
+      if (!update || typeof update !== 'object') {
+        continue
+      }
 
-    // Must have newLabel
-    if (!update.newLabel || typeof update.newLabel !== 'string') {
-      continue
-    }
+      // Must have newLabel
+      if (!update.newLabel || typeof update.newLabel !== 'string') {
+        continue
+      }
 
-    // Must have either nodeId or nodeLabel
-    if (!update.nodeId && !update.nodeLabel) {
-      continue
-    }
+      // Must have either nodeId or nodeLabel
+      if (!update.nodeId && !update.nodeLabel) {
+        continue
+      }
 
-    const validated: NodeUpdateData = {
-      newLabel: update.newLabel.trim()
-    }
+      const validated: NodeUpdateData = {
+        newLabel: update.newLabel.trim()
+      }
 
-    if (update.nodeId && typeof update.nodeId === 'string') {
-      validated.nodeId = update.nodeId.trim()
-    }
+      if (update.nodeId && typeof update.nodeId === 'string') {
+        validated.nodeId = update.nodeId.trim()
+      }
 
-    if (update.nodeLabel && typeof update.nodeLabel === 'string') {
-      validated.nodeLabel = update.nodeLabel.trim()
-    }
+      if (update.nodeLabel && typeof update.nodeLabel === 'string') {
+        validated.nodeLabel = update.nodeLabel.trim()
+      }
 
-    if (validated.newLabel.length > 0) {
-      nodeUpdates.push(validated)
+      if (validated.newLabel.length > 0) {
+        nodeUpdates.push(validated)
+      }
     }
   }
 
-  if (nodeUpdates.length === 0) {
+  // Validate and parse edge updates (optional)
+  const edgeUpdates: EdgeUpdateData[] = []
+  if (data.edgeUpdates && Array.isArray(data.edgeUpdates)) {
+    for (const update of data.edgeUpdates) {
+      if (!update || typeof update !== 'object') {
+        continue
+      }
+
+      // Must have newLabel
+      if (!update.newLabel || typeof update.newLabel !== 'string') {
+        continue
+      }
+
+      // Must have either edgeId, or (source and target), or currentLabel
+      if (!update.edgeId && !update.source && !update.target && !update.currentLabel) {
+        continue
+      }
+
+      const validated: EdgeUpdateData = {
+        newLabel: update.newLabel.trim()
+      }
+
+      if (update.edgeId && typeof update.edgeId === 'string') {
+        validated.edgeId = update.edgeId.trim()
+      }
+
+      if (update.source && typeof update.source === 'string') {
+        validated.source = update.source.trim()
+      }
+
+      if (update.target && typeof update.target === 'string') {
+        validated.target = update.target.trim()
+      }
+
+      if (update.currentLabel && typeof update.currentLabel === 'string') {
+        validated.currentLabel = update.currentLabel.trim()
+      }
+
+      if (validated.newLabel.length > 0) {
+        edgeUpdates.push(validated)
+      }
+    }
+  }
+
+  // Must have at least one update (node or edge)
+  if (nodeUpdates.length === 0 && edgeUpdates.length === 0) {
     return {
       action: 'error',
-      message: 'Invalid UPDATE response: no valid node updates found'
+      message: 'Invalid UPDATE response: no valid node or edge updates found'
     }
   }
 
-  // Get explanation
+  // Build explanation
+  const parts: string[] = []
+  if (nodeUpdates.length > 0) {
+    parts.push(`${nodeUpdates.length} node label(s)`)
+  }
+  if (edgeUpdates.length > 0) {
+    parts.push(`${edgeUpdates.length} edge label(s)`)
+  }
+  const defaultExplanation = `Updated ${parts.join(' and ')}`
+
   const explanation = data.explanation && typeof data.explanation === 'string'
     ? data.explanation.trim()
-    : `Updated ${nodeUpdates.length} node label(s)`
+    : defaultExplanation
 
   return {
     action: 'update',
-    nodeUpdates,
+    ...(nodeUpdates.length > 0 && { nodeUpdates }),
+    ...(edgeUpdates.length > 0 && { edgeUpdates }),
     explanation
   }
 }
@@ -432,7 +490,7 @@ export function isAddResponse(response: AIResponse): response is { action: 'add'
 /**
  * Check if response is an UPDATE action
  */
-export function isUpdateResponse(response: AIResponse): response is { action: 'update'; nodeUpdates: NodeUpdateData[]; explanation: string } {
+export function isUpdateResponse(response: AIResponse): response is { action: 'update'; nodeUpdates?: NodeUpdateData[]; edgeUpdates?: EdgeUpdateData[]; explanation: string } {
   return response.action === 'update'
 }
 
