@@ -7,7 +7,7 @@
 
 import type { Node, Edge } from '@xyflow/react'
 import type { Tag } from '../../types/firebase'
-import { getRelationshipAnalysis, findPath, analyzeRelationship } from './relationshipAnalyzer'
+import { getRelationshipAnalysis, findPath } from './relationshipAnalyzer'
 
 export interface ExtractOptions {
   includePositions?: boolean
@@ -188,7 +188,7 @@ function serializeNode(node: Node, options: ExtractOptions, nodeIndex: number): 
  */
 function serializeEdge(
   edge: Edge,
-  options: ExtractOptions,
+  _options: ExtractOptions,
   edgeIndex: number,
   nodeMap: Map<string, Node>
 ): string {
@@ -220,8 +220,6 @@ export function extractCanvasContext(
   options: ExtractOptions = {}
 ): string {
   const {
-    includePositions = true,
-    includeTags = true,
     maxNodes,
     selectedNodeIds = [],
     includeGraphAnalysis = true

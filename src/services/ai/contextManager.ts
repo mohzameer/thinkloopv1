@@ -15,7 +15,6 @@ import {
 } from './tokenCounter'
 import { 
   extractCanvasContext, 
-  getCanvasSummary,
   type ExtractOptions 
 } from './contextExtractor'
 
@@ -100,7 +99,7 @@ function calculateMaxNodes(
   nodes: Node[],
   edges: Edge[],
   tokenBudget: number,
-  options: ExtractOptions
+  _options: ExtractOptions
 ): number {
   if (nodes.length === 0) return 0
 

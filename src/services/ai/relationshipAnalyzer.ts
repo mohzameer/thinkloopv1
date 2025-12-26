@@ -427,7 +427,7 @@ export function findBridgeNodes(nodes: Node[], edges: Edge[]): string[] {
     tempAdjList.delete(node.id)
     
     // Remove node from all neighbor lists
-    tempAdjList.forEach((neighbors, nodeId) => {
+    tempAdjList.forEach((neighbors) => {
       neighbors.delete(node.id)
     })
     

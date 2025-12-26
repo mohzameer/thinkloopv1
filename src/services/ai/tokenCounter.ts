@@ -49,7 +49,9 @@ export function countTokens(text: string): number {
   if (tokenCache.size >= MAX_CACHE_SIZE) {
     // Remove oldest entry (first key)
     const firstKey = tokenCache.keys().next().value
-    tokenCache.delete(firstKey)
+    if (firstKey !== undefined) {
+      tokenCache.delete(firstKey)
+    }
   }
   tokenCache.set(text, count)
 

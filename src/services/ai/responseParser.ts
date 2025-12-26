@@ -121,11 +121,8 @@ function validateNodeData(node: any): NodeData | null {
     }
   }
 
-  // Validate tags
-  let tags: string[] | undefined
-  if (Array.isArray(node.tags)) {
-    tags = node.tags.filter((tag: any) => typeof tag === 'string')
-  }
+  // Tags are intentionally omitted - user adds them manually
+  // No need to validate or store tags
 
   return {
     label: node.label.trim(),

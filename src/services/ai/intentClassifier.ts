@@ -138,7 +138,6 @@ export function classifyIntent(
     }
   }
 
-  const normalizedMessage = normalizeText(message)
   const trimmedMessage = message.trim()
 
   // Check for very short or unclear messages
@@ -232,7 +231,6 @@ export function classifyIntent(
  * Get all possible intents for a message (for debugging)
  */
 export function getAllIntentScores(message: string): Array<{ intent: Intent; score: number }> {
-  const normalized = normalizeText(message)
   const scores: Array<{ intent: Intent; score: number }> = []
 
   for (const intent of Object.keys(INTENT_KEYWORDS) as Intent[]) {

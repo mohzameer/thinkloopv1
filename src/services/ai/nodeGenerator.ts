@@ -7,7 +7,7 @@
 
 import type { Node, Edge } from '@xyflow/react'
 import { MarkerType } from '@xyflow/react'
-import type { NodeData, EdgeData, NodeType } from './responseParser'
+import type { NodeData, EdgeData } from './responseParser'
 
 export interface GenerateOptions {
   existingNodes: Node[]
@@ -362,7 +362,7 @@ function adjustPositionForConflict(
  */
 function calculateGridPosition(
   index: number,
-  totalNodes: number,
+  _totalNodes: number,
   startPosition: { x: number; y: number },
   columns: number = 3
 ): { x: number; y: number } {
@@ -380,7 +380,7 @@ function calculateGridPosition(
 /**
  * Calculate position between two nodes
  */
-function calculateBetweenPosition(
+function _calculateBetweenPosition(
   node1: Node,
   node2: Node
 ): { x: number; y: number } {
@@ -405,7 +405,6 @@ function calculateNextToPosition(
   direction: 'right' | 'left' | 'above' | 'below' = 'right'
 ): { x: number; y: number } {
   const refBox = getNodeBounds(refNode)
-  const spacing = NODE_WIDTH + NODE_PADDING
   
   switch (direction) {
     case 'right':
@@ -586,7 +585,6 @@ export function generateEdges(
   const edges: Edge[] = []
   const errors: string[] = []
   const warnings: string[] = []
-  const allNodes = [...existingNodes, ...newNodes]
 
   // Track created edges to avoid duplicates
   const edgeSet = new Set<string>()

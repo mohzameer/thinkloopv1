@@ -225,7 +225,7 @@ function formatConversationHistory(
   const recentMessages = history.slice(-maxMessages)
   
   let formatted = '\nCONVERSATION HISTORY:\n'
-  recentMessages.forEach((msg, idx) => {
+  recentMessages.forEach((msg) => {
     const role = msg.role === 'user' ? 'User' : 'Assistant'
     formatted += `${role}: ${msg.content}\n`
   })
