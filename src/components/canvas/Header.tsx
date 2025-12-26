@@ -91,17 +91,28 @@ export const Header = ({ selectedFile, isSaving, onOpenFileExplorer, onCreateFil
     >
       {/* Left: App Name and New Idea Button */}
       <Group gap="md" style={{ flex: '0 0 auto' }}>
-        <Text
-          size="xl"
-          fw={700}
-          style={{
-            fontSize: '20px',
-            color: 'var(--text-primary)',
-            transition: 'color 0.3s ease'
-          }}
-        >
-          ThinkLoops
-        </Text>
+        <Group gap="xs" align="center">
+          <img 
+            src="/logo.png" 
+            alt="ThinkLoops Logo" 
+            style={{
+              height: '28px',
+              width: 'auto',
+              objectFit: 'contain'
+            }}
+          />
+          <Text
+            size="xl"
+            fw={700}
+            style={{
+              fontSize: '16px',
+              color: 'var(--text-primary)',
+              transition: 'color 0.3s ease'
+            }}
+          >
+            ThinkLoops
+          </Text>
+        </Group>
         <Button
           variant="subtle"
           leftSection={<IconPlus size={18} />}

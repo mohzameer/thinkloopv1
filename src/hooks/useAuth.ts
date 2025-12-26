@@ -46,8 +46,18 @@ export const useAuth = () => {
           const userId = await signInAnonymous()
           console.log('[useAuth] Anonymous sign-in successful:', userId)
           // The onAuthStateChanged listener will be triggered again with the new user
-        } catch (error) {
+        } catch (error: any) {
           console.error('[useAuth] Failed to sign in anonymously:', error)
+          
+          // Check if it's an admin-restricted-operation error
+          if (error?.code === 'auth/admin-restricted-operation' || error?.code === 'auth/operation-not-allowed') {
+            console.warn('[useAuth] Anonymous authentication is not enabled in Firebase Console.')
+            console.warn('[useAuth] Please enable Anonymous authentication in Firebase Console:')
+            console.warn('[useAuth] 1. Go to Firebase Console > Authentication > Sign-in method')
+            console.warn('[useAuth] 2. Enable "Anonymous" sign-in provider')
+            console.warn('[useAuth] 3. Also check API key restrictions in Google Cloud Console')
+          }
+          
           setAuthState({
             user: null,
             userId: null,
