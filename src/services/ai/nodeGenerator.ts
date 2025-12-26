@@ -377,25 +377,6 @@ function calculateGridPosition(
   }
 }
 
-/**
- * Calculate position between two nodes
- */
-function _calculateBetweenPosition(
-  node1: Node,
-  node2: Node
-): { x: number; y: number } {
-  const box1 = getNodeBounds(node1)
-  const box2 = getNodeBounds(node2)
-  
-  // Calculate midpoint
-  const midX = (box1.x + box1.width + box2.x) / 2
-  const midY = (box1.y + box1.height + box2.y) / 2
-  
-  return {
-    x: midX - NODE_WIDTH / 2,
-    y: midY - NODE_HEIGHT / 2
-  }
-}
 
 /**
  * Calculate "next to" position (right side by default)
@@ -573,13 +554,13 @@ export function generateNodes(
 export function generateEdges(
   edgeDataArray: EdgeData[],
   existingNodes: Node[],
-  newNodes: Node[],
+  _newNodes: Node[],
   existingEdges: Edge[],
   labelToIdMap: Map<string, string>,
   newNodeIdMap: Map<string, string>
 ): {
   edges: Edge[]
-  errors: string[]
+  errors: string[] 
   warnings: string[]
 } {
   const edges: Edge[] = []

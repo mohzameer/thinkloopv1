@@ -41,7 +41,7 @@ export const useCanvas = (
     lastSaved: null
   })
 
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const saveQueueRef = useRef<SaveQueueItem[]>([])
   const isProcessingQueueRef = useRef(false)
   const currentCanvasKeyRef = useRef<string | null>(null)

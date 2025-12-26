@@ -62,12 +62,16 @@ function getRetryDelay(attempt: number): number {
  * Check if error is retryable
  */
 function isRetryableError(error: ClaudeError): boolean {
-  return error.retryable && (
+  if (typeof error.retryable !== 'boolean' || !error.retryable) {
+    return false
+  }
+  const isRetryable = (
     error.type === 'network_error' ||
     error.type === 'timeout' ||
     error.type === 'rate_limit' ||
     (error.type === 'api_error' && error.statusCode && error.statusCode >= 500)
   )
+  return Boolean(isRetryable)
 }
 
 /**

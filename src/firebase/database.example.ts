@@ -9,24 +9,24 @@
 
 import {
   getDefaultProject,
-  getUserProjects,
-  createProject,
+  getUserProjects as _getUserProjects,
+  createProject as _createProject,
   getProjectFiles,
   getFile,
   createFile,
   updateFileName,
   deleteFile,
   getFileMainItems,
-  getMainItem,
-  createMainItemWithDefaultSubItem,
-  updateMainItemName,
-  deleteMainItem,
+  getMainItem as _getMainItem,
+  createMainItemWithDefaultSubItem as _createMainItemWithDefaultSubItem,
+  updateMainItemName as _updateMainItemName,
+  deleteMainItem as _deleteMainItem,
   getMainItemSubItems,
-  getSubItem,
-  createSubItem,
-  updateSubItemName,
+  getSubItem as _getSubItem,
+  createSubItem as _createSubItem,
+  updateSubItemName as _updateSubItemName,
   updateSubItemReactFlowState,
-  deleteSubItem,
+  deleteSubItem as _deleteSubItem,
   duplicateSubItemAsMainItem,
   branchSubItem,
   getReactFlowState
@@ -36,7 +36,7 @@ import {
 // EXAMPLE 1: Initial App Setup - Get or Create Default Project
 // ============================================================================
 
-async function example1_InitialSetup(userId: string) {
+export async function _example1_InitialSetup(userId: string) {
   // Get user's default project (created automatically on sign-in)
   const defaultProject = await getDefaultProject(userId)
   
@@ -52,7 +52,7 @@ async function example1_InitialSetup(userId: string) {
 // EXAMPLE 2: Create a New File
 // ============================================================================
 
-async function example2_CreateFile(projectId: string, userId: string) {
+export async function _example2_CreateFile(projectId: string, userId: string) {
   // Create a new file
   const fileId = await createFile(projectId, userId, 'My First Post')
   
@@ -66,7 +66,7 @@ async function example2_CreateFile(projectId: string, userId: string) {
 // EXAMPLE 3: Load All Files for Display in Left Sidebar
 // ============================================================================
 
-async function example3_LoadFiles(projectId: string, userId: string) {
+export async function _example3_LoadFiles(projectId: string, userId: string) {
   // Get all files for the project
   const files = await getProjectFiles(projectId, userId)
   
@@ -85,7 +85,7 @@ async function example3_LoadFiles(projectId: string, userId: string) {
 // EXAMPLE 4: Load Hierarchy for Right Sidebar (Version Control)
 // ============================================================================
 
-async function example4_LoadHierarchy(fileId: string) {
+export async function _example4_LoadHierarchy(fileId: string) {
   // Get all main items for the file
   const mainItems = await getFileMainItems(fileId)
   
@@ -108,7 +108,7 @@ async function example4_LoadHierarchy(fileId: string) {
 // EXAMPLE 5: Load React Flow State for a Specific Sub-Item
 // ============================================================================
 
-async function example5_LoadCanvasState(
+export async function _example5_LoadCanvasState(
   fileId: string,
   mainItemId: string,
   subItemId: string
@@ -134,7 +134,7 @@ async function example5_LoadCanvasState(
 // EXAMPLE 6: Save React Flow State (Auto-save)
 // ============================================================================
 
-async function example6_SaveCanvasState(
+export async function _example6_SaveCanvasState(
   fileId: string,
   mainItemId: string,
   subItemId: string,
@@ -156,7 +156,7 @@ async function example6_SaveCanvasState(
 // EXAMPLE 7: Branch a Sub-Item (Create Variation)
 // ============================================================================
 
-async function example7_BranchSubItem(
+export async function _example7_BranchSubItem(
   fileId: string,
   mainItemId: string,
   sourceSubItemId: string
@@ -179,7 +179,7 @@ async function example7_BranchSubItem(
 // EXAMPLE 8: Duplicate Sub-Item as Main Item
 // ============================================================================
 
-async function example8_DuplicateAsMainItem(
+export async function _example8_DuplicateAsMainItem(
   fileId: string,
   sourceMainItemId: string,
   sourceSubItemId: string
@@ -204,7 +204,7 @@ async function example8_DuplicateAsMainItem(
 // EXAMPLE 9: Update File Name
 // ============================================================================
 
-async function example9_RenameFile(fileId: string) {
+export async function _example9_RenameFile(fileId: string) {
   await updateFileName(fileId, 'Updated Post Title')
   console.log('File renamed')
 }
@@ -213,7 +213,7 @@ async function example9_RenameFile(fileId: string) {
 // EXAMPLE 10: Delete a File
 // ============================================================================
 
-async function example10_DeleteFile(fileId: string) {
+export async function _example10_DeleteFile(fileId: string) {
   // This will delete the file and all its main items and sub-items
   await deleteFile(fileId)
   console.log('File deleted')
@@ -223,7 +223,7 @@ async function example10_DeleteFile(fileId: string) {
 // EXAMPLE 11: Complete Workflow - User Opens a File
 // ============================================================================
 
-async function example11_OpenFile(fileId: string) {
+export async function _example11_OpenFile(fileId: string) {
   // 1. Get the file
   const file = await getFile(fileId)
   if (!file) {
@@ -346,7 +346,7 @@ function Canvas({ fileId, mainItemId, subItemId }) {
 // EXAMPLE 13: Error Handling
 // ============================================================================
 
-async function example13_ErrorHandling(fileId: string) {
+export async function _example13_ErrorHandling(fileId: string) {
   try {
     const file = await getFile(fileId)
     

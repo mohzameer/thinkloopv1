@@ -11,7 +11,6 @@ interface EdgeData {
 
 // Custom Edge Component with editable label
 export const EditableEdge = ({
-  id,
   sourceX,
   sourceY,
   targetX,
@@ -22,7 +21,7 @@ export const EditableEdge = ({
   markerEnd,
   data,
   selected
-}: EdgeProps<EdgeData>) => {
+}: EdgeProps) => {
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -32,7 +31,7 @@ export const EditableEdge = ({
     targetPosition,
   })
 
-  const edgeData = data || {}
+  const edgeData = (data as EdgeData) || {}
   
   // Use red color when selected, otherwise use style or default
   const strokeColor = selected 

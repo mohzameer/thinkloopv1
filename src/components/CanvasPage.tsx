@@ -586,7 +586,8 @@ function CanvasPage({ userId }: CanvasPageProps) {
           
           // Find nodes that are visible in the viewport
           const nodesInViewport = nodes.filter(node => {
-            const nodeDims = getNodeDimensions(node.type || 'rectangle', node.data?.label)
+            const label = typeof node.data?.label === 'string' ? node.data.label : undefined
+            const nodeDims = getNodeDimensions(node.type || 'rectangle', label)
             const nodeRight = node.position.x + nodeDims.width
             const nodeBottom = node.position.y + nodeDims.height
             
@@ -597,26 +598,17 @@ function CanvasPage({ userId }: CanvasPageProps) {
           })
           
           if (nodesInViewport.length > 0) {
-            // Position near existing nodes in viewport
-            // Calculate average position
-            const avgX = nodesInViewport.reduce((sum, n) => {
-              const dims = getNodeDimensions(n.type || 'rectangle', n.data?.label)
-              return sum + n.position.x + dims.width / 2
-            }, 0) / nodesInViewport.length
-            
-            const avgY = nodesInViewport.reduce((sum, n) => {
-              const dims = getNodeDimensions(n.type || 'rectangle', n.data?.label)
-              return sum + n.position.y + dims.height / 2
-            }, 0) / nodesInViewport.length
-            
             // Find the rightmost node to place new node to the right
             const rightmostNode = nodesInViewport.reduce((max, node) => {
-              const maxDims = getNodeDimensions(max.type || 'rectangle', max.data?.label)
-              const nodeDims = getNodeDimensions(node.type || 'rectangle', node.data?.label)
+              const maxLabel = typeof max.data?.label === 'string' ? max.data.label : undefined
+              const nodeLabel = typeof node.data?.label === 'string' ? node.data.label : undefined
+              const maxDims = getNodeDimensions(max.type || 'rectangle', maxLabel)
+              const nodeDims = getNodeDimensions(node.type || 'rectangle', nodeLabel)
               return (node.position.x + nodeDims.width) > (max.position.x + maxDims.width) ? node : max
             })
             
-            const rightmostDims = getNodeDimensions(rightmostNode.type || 'rectangle', rightmostNode.data?.label)
+            const rightmostLabel = typeof rightmostNode.data?.label === 'string' ? rightmostNode.data.label : undefined
+            const rightmostDims = getNodeDimensions(rightmostNode.type || 'rectangle', rightmostLabel)
             const newNodeDims = getNodeDimensions(nodeType, nodeLabel)
             const spacing = 50
             
@@ -691,7 +683,8 @@ function CanvasPage({ userId }: CanvasPageProps) {
         : `Idea Node ${nodeNumber}`
 
       // Get dimensions of source and new node
-      const sourceDims = getNodeDimensions(sourceNode.type || 'rectangle', sourceNode.data?.label)
+      const sourceLabel = typeof sourceNode.data?.label === 'string' ? sourceNode.data.label : undefined
+      const sourceDims = getNodeDimensions(sourceNode.type || 'rectangle', sourceLabel)
       const newDims = getNodeDimensions(nodeType, newNodeLabel)
 
       // Calculate center of source node
@@ -1383,7 +1376,6 @@ function CanvasPage({ userId }: CanvasPageProps) {
         })
       }
       
-      const totalUpdates = (aiResponse.response.nodeUpdates?.length || 0) + (aiResponse.response.edgeUpdates?.length || 0)
       const parts: string[] = []
       if (nodeUpdateDescriptions.length > 0) {
         parts.push(`${nodeUpdateDescriptions.length} node label(s)`)

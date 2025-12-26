@@ -5,7 +5,6 @@ import {
   updateNote as updateNoteInDb, 
   deleteNote as deleteNoteInDb 
 } from '../firebase/database'
-import type { Timestamp } from 'firebase/firestore'
 
 export interface Note {
   id: string

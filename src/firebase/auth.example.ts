@@ -26,7 +26,7 @@ import {
 // This happens automatically when you use the useAuth hook
 // See: src/hooks/useAuth.ts
 
-async function example1_InitialLoad() {
+export async function _example1_InitialLoad() {
   // The useAuth hook handles this automatically
   // But if you need to manually initialize:
   
@@ -39,7 +39,7 @@ async function example1_InitialLoad() {
 // EXAMPLE 2: Check Current User Status
 // ============================================================================
 
-function example2_CheckCurrentUser() {
+export function _example2_CheckCurrentUser() {
   const user = getCurrentUser()
   
   if (user) {
@@ -51,17 +51,17 @@ function example2_CheckCurrentUser() {
   }
 
   // Or just get the user ID
-  const userId = getCurrentUserId()
+  void getCurrentUserId()
   
   // Check if user is anonymous
-  const anonymous = isAnonymous()
+  void isAnonymous()
 }
 
 // ============================================================================
 // EXAMPLE 3: Listen to Auth State Changes
 // ============================================================================
 
-function example3_ListenToAuthChanges() {
+export function _example3_ListenToAuthChanges() {
   // Subscribe to auth state changes
   const unsubscribe = onAuthStateChanged((user) => {
     if (user) {
@@ -86,7 +86,7 @@ function example3_ListenToAuthChanges() {
 // EXAMPLE 4: Upgrade Anonymous Account to Email/Password
 // ============================================================================
 
-async function example4_UpgradeAnonymousAccount() {
+export async function _example4_UpgradeAnonymousAccount() {
   try {
     // Check if user is anonymous first
     if (!isAnonymous()) {
@@ -118,7 +118,7 @@ async function example4_UpgradeAnonymousAccount() {
 // EXAMPLE 5: Create New Account (Not Anonymous)
 // ============================================================================
 
-async function example5_CreateNewAccount() {
+export async function _example5_CreateNewAccount() {
   try {
     const userId = await createAccountWithEmail(
       'newuser@example.com',
@@ -139,7 +139,7 @@ async function example5_CreateNewAccount() {
 // EXAMPLE 6: Sign In with Existing Email/Password
 // ============================================================================
 
-async function example6_SignInWithEmail() {
+export async function _example6_SignInWithEmail() {
   try {
     const userId = await signInWithEmail(
       'user@example.com',
@@ -158,7 +158,7 @@ async function example6_SignInWithEmail() {
 // EXAMPLE 7: Sign Out
 // ============================================================================
 
-async function example7_SignOut() {
+export async function _example7_SignOut() {
   try {
     await signOut()
     console.log('Signed out successfully')
@@ -174,7 +174,7 @@ async function example7_SignOut() {
 // EXAMPLE 8: Get User Document from Firestore
 // ============================================================================
 
-async function example8_GetUserDocument() {
+export async function _example8_GetUserDocument() {
   const userId = getCurrentUserId()
   
   if (userId) {

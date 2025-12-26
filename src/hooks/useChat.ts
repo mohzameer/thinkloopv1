@@ -5,7 +5,6 @@ import {
   updateFileMessage as updateMessageInDb, 
   deleteFileMessage as deleteMessageInDb 
 } from '../firebase/database'
-import type { Timestamp } from 'firebase/firestore'
 import type { Node, Edge } from '@xyflow/react'
 import { sendMessage as sendAIMessage } from '../services/ai/aiService'
 import { buildPrompt } from '../services/ai/promptBuilder'
@@ -14,8 +13,8 @@ import { classifyIntent } from '../services/ai/intentClassifier'
 import { extractCanvasContext } from '../services/ai/contextExtractor'
 import { manageContext, type ContextWarning } from '../services/ai/contextManager'
 import type { AIResponse } from '../services/ai/responseParser'
-import { convertClaudeError, createAIError, formatErrorForLogging, type AIError } from '../services/ai/errorHandler'
-import type { Intent } from '../services/ai/intentClassifier'
+import { convertClaudeError, createAIError, formatErrorForLogging } from '../services/ai/errorHandler'
+import type { Intent } from '../services/ai/promptBuilder'
 
 export interface ChatMessage {
   id: string
@@ -217,8 +216,8 @@ export const useChat = (
             setSimulationStepCount(0)
           }
 
-          // Extract canvas context
-          const canvasContext = extractCanvasContext(nodes, edges, {
+          // Extract canvas context (stored but not directly used - passed via manageContext)
+          extractCanvasContext(nodes, edges, {
             includePositions: true,
             includeTags: true,
             includeGraphAnalysis: true,
@@ -445,7 +444,7 @@ export const useChat = (
 
   // Answer a clarification question and resume if all answered
   const answerClarification = useCallback(async (questionIndex: number, answer: string): Promise<AIResponseData | null> => {
-    if (!clarificationState || !fileId || !mainItemId || !subItemId) {
+    if (!clarificationState || !fileId) {
       return null
     }
 
@@ -495,8 +494,8 @@ export const useChat = (
           confidence: 1.0
         }
 
-        // Extract canvas context
-        const canvasContext = extractCanvasContext(nodes, edges, {
+        // Extract canvas context (stored but not directly used - passed via manageContext)
+        extractCanvasContext(nodes, edges, {
           includePositions: true,
           includeTags: true,
           includeGraphAnalysis: true,

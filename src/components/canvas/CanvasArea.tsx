@@ -1,4 +1,4 @@
-import { Box, Flex, Stack, Text, Loader, Paper, ActionIcon, Center } from '@mantine/core'
+import { Box, Flex, Stack, Text, Loader, Paper, ActionIcon } from '@mantine/core'
 import { ReactFlow, Background, Controls, MiniMap, BackgroundVariant, MarkerType, type Node, type Edge, type OnNodesChange, type OnEdgesChange, type Connection, type OnSelectionChangeParams, type ReactFlowInstance } from '@xyflow/react'
 import { IconSquare, IconCircle, IconFileText, IconMessageCircle } from '@tabler/icons-react'
 import { NoteDot } from './NoteDot'
@@ -55,6 +55,7 @@ interface CanvasAreaProps {
   selectedNoteIdFromSidebar?: string | null
   onCanvasClick?: () => void
   editingNodeId?: string | null
+  onClearCanvas?: () => void
 }
 
 export const CanvasArea = ({
@@ -384,7 +385,7 @@ export const CanvasArea = ({
             }
             handlePaneClick(event)
           }}
-          onPaneMouseDown={(event) => {
+          onMouseDown={(event: React.MouseEvent) => {
             if (isAddNoteMode && reactFlowInstanceRef.current) {
               console.log('Pane mouse down in note mode')
               // Use mouse down to capture the click

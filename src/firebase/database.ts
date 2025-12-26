@@ -20,9 +20,6 @@ import type {
   SubItem,
   ReactFlowState,
   NewProject,
-  NewFile,
-  NewMainItem,
-  NewSubItem,
   Tag,
   Message
 } from '../types/firebase'
@@ -804,13 +801,20 @@ export const getFileMessages = async (
     const q = query(messagesRef, orderBy('createdAt', 'asc'))
     const snapshot = await getDocs(q)
 
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      data: {
-        ...doc.data(),
-        id: doc.id
-      } as Message
-    }))
+    return snapshot.docs.map((doc) => {
+      const docData = doc.data()
+      return {
+        id: doc.id,
+        data: {
+          ...docData,
+          id: doc.id,
+          role: docData.role || 'user',
+          content: docData.content || '',
+          createdAt: docData.createdAt || new Date(),
+          updatedAt: docData.updatedAt || new Date()
+        } as Message
+      }
+    })
   } catch (error) {
     console.error('[Database] Error getting messages:', error)
     throw error
@@ -823,8 +827,8 @@ export const getFileMessages = async (
  */
 export const getSubItemMessages = async (
   fileId: string,
-  mainItemId: string,
-  subItemId: string
+  _mainItemId: string,
+  _subItemId: string
 ): Promise<Array<{ id: string; data: Message }>> => {
   // Redirect to file-level messages
   return getFileMessages(fileId)
@@ -862,8 +866,8 @@ export const createFileMessage = async (
  */
 export const createMessage = async (
   fileId: string,
-  mainItemId: string,
-  subItemId: string,
+  _mainItemId: string,
+  _subItemId: string,
   role: 'user' | 'assistant',
   content: string
 ): Promise<string> => {
@@ -921,8 +925,8 @@ export const updateFileMessage = async (
  */
 export const updateMessage = async (
   fileId: string,
-  mainItemId: string,
-  subItemId: string,
+  _mainItemId: string,
+  _subItemId: string,
   messageId: string,
   content: string
 ): Promise<void> => {
@@ -953,8 +957,8 @@ export const deleteFileMessage = async (
  */
 export const deleteMessage = async (
   fileId: string,
-  mainItemId: string,
-  subItemId: string,
+  _mainItemId: string,
+  _subItemId: string,
   messageId: string
 ): Promise<void> => {
   // Redirect to file-level messages

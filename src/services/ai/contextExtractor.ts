@@ -7,7 +7,7 @@
 
 import type { Node, Edge } from '@xyflow/react'
 import type { Tag } from '../../types/firebase'
-import { getRelationshipAnalysis, findPath } from './relationshipAnalyzer'
+import { getRelationshipAnalysis } from './relationshipAnalyzer'
 
 export interface ExtractOptions {
   includePositions?: boolean

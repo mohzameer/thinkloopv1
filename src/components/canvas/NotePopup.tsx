@@ -1,4 +1,4 @@
-import { Paper, Text, Textarea, ActionIcon, Box, Flex } from '@mantine/core'
+import { Paper, Textarea, ActionIcon, Box, Flex } from '@mantine/core'
 import { IconX, IconCheck, IconTrash } from '@tabler/icons-react'
 import { useState, useEffect, useRef } from 'react'
 
