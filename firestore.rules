@@ -32,6 +32,12 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
                        request.resource.data.userId == request.auth.uid;
       
+      // Messages inherit parent file permissions
+      match /messages/{messageId} {
+        allow read, write: if isAuthenticated() && 
+                              get(/databases/$(database)/documents/files/$(fileId)).data.userId == request.auth.uid;
+      }
+      
       // Main items inherit parent file permissions
       match /mainItems/{mainItemId} {
         allow read, write: if isAuthenticated() && 

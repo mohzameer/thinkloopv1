@@ -126,8 +126,46 @@ export const useChat = (
 
   // Initial load and reload on change
   useEffect(() => {
-    loadMessages()
-  }, [loadMessages])
+    if (!fileId) {
+      setMessages([])
+      setIsLoading(false)
+      return
+    }
+
+    let isMounted = true
+
+    const load = async () => {
+      try {
+        setIsLoading(true)
+        setError(null)
+        console.log('[useChat] Loading messages for file:', fileId)
+        
+        const firestoreMessages = await getFileMessages(fileId)
+        
+        if (isMounted) {
+          const convertedMessages = firestoreMessages.map(convertMessage)
+          console.log('[useChat] Loaded', convertedMessages.length, 'messages')
+          setMessages(convertedMessages)
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          console.error('[useChat] Error loading messages:', err)
+          setError(err.message || 'Failed to load messages')
+          setMessages([])
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    load()
+
+    return () => {
+      isMounted = false
+    }
+  }, [fileId, convertMessage])
 
   // Send message (user message) and generate AI response
   const sendMessage = useCallback(async (content: string): Promise<{ messageId: string | null; aiResponse?: AIResponseData }> => {
